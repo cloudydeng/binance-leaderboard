@@ -80,8 +80,8 @@ public record Options(String resourceId, int startRank, int pageSize, int maxPag
     public static String help() {
         return "用法: java -jar target/binance-leaderboard-stat.jar --resourceId=活动ID [选项]\n"
                 + "--startRank=1001 --pageSize=100 --maxPages=1000 --delayMs=450\n"
-                + "--rewardPool=40000 --rewardUnit=USDC --maxReward=30 --volumes=1000,2000\n"
-                + "--entriesPath=data.list --rankField=rank --volumeField=volume [--userIdField=userId]\n"
+                + "--rewardPool=40000 --rewardUnit=USDC --maxReward=30 --volumes=1000,2000（奖励参数仅作示例）\n"
+                + "--entriesPath=data.resourceSummaryList.data --rankField=sequence --volumeField=tradingVolume [--userIdField=userId]\n"
                 + "--outputDir=.  结构无法自动确认时必须显式指定字段映射。\n"
                 + "身份信息仅从 BINANCE_COOKIE / BINANCE_CSRF_TOKEN / BINANCE_UUID 环境变量读取。";
     }

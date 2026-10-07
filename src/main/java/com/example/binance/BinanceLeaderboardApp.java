@@ -5,8 +5,11 @@ import com.example.binance.config.Options;
 import com.example.binance.model.LeaderboardStatistics;
 import com.example.binance.service.LeaderboardStatisticsService;
 import com.example.binance.util.ResultWriter;
+import com.example.binance.web.LocalWebServer;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Path;
+import java.util.concurrent.CountDownLatch;
 
 public class BinanceLeaderboardApp {
     public static void main(String[] args) {
@@ -15,7 +18,11 @@ public class BinanceLeaderboardApp {
     }
 
     static int run(String[] args) {
-        if (args.length == 1 && args[0].equals("--help")) { System.out.println(Options.help()); return 0; }
+        if (args.length == 1 && args[0].equals("--help")) {
+            System.out.println(Options.help() + "\n页面模式: java -jar target/binance-leaderboard-stat.jar --web [--webPort=8787]");
+            return 0;
+        }
+        if (args.length > 0 && args[0].equals("--web")) return runWeb(args);
         Options options;
         try { options = Options.parse(args); }
         catch (IllegalArgumentException e) { System.err.println("参数错误：" + e.getMessage() + "\n" + Options.help()); return 1; }
@@ -32,6 +39,32 @@ public class BinanceLeaderboardApp {
         } catch (IOException e) {
             System.err.println("结果写入失败：" + e.getMessage());
             return 2;
+        }
+    }
+
+    private static int runWeb(String[] args) {
+        int port = 8787;
+        if (args.length > 2 || (args.length == 2 && !args[1].startsWith("--webPort="))) {
+            System.err.println("页面模式只接受可选参数 --webPort=端口"); return 1;
+        }
+        if (args.length == 2) {
+            try { port = Integer.parseInt(args[1].substring("--webPort=".length())); }
+            catch (NumberFormatException e) { System.err.println("webPort 必须是整数"); return 1; }
+        }
+        try {
+            BinanceLeaderboardClient client = new BinanceLeaderboardClient();
+            LocalWebServer web = new LocalWebServer(port, client::fetchPage, Path.of("."));
+            Runtime.getRuntime().addShutdownHook(new Thread(web::close));
+            web.start();
+            System.out.println("本地配置页面已启动：" + web.url());
+            new CountDownLatch(1).await();
+            return 0;
+        } catch (IllegalArgumentException | IOException e) {
+            System.err.println("页面启动失败：" + e.getMessage());
+            return 2;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return 0;
         }
     }
 

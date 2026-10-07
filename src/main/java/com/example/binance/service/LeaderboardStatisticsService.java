@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.math.*;
 import java.time.Instant;
 import java.util.*;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,8 +19,15 @@ public class LeaderboardStatisticsService {
     }
     private final PageSource source;
     private final JsonFieldDetector parser = new JsonFieldDetector();
+    private final Consumer<Progress> progress;
 
-    public LeaderboardStatisticsService(PageSource source) { this.source = source; }
+    public record Progress(int pagesRequested, int recordsRead) {}
+
+    public LeaderboardStatisticsService(PageSource source) { this(source, progress -> {}); }
+    public LeaderboardStatisticsService(PageSource source, Consumer<Progress> progress) {
+        this.source = source;
+        this.progress = progress;
+    }
 
     public LeaderboardStatistics collect(Options options) throws InterruptedException {
         int pageSize = options.pageSize();
@@ -81,6 +89,7 @@ public class LeaderboardStatisticsService {
                 pageSize = effective;
                 pageIndex = 0;
                 all.clear();
+                progress.accept(new Progress(requested, 0));
                 expectedTotal = null;
                 eligibleUserCount = null;
                 eligibleTradingVolume = null;
@@ -118,6 +127,7 @@ public class LeaderboardStatisticsService {
                 all.add(entry);
             }
             if (!issues.isEmpty()) break;
+            progress.accept(new Progress(requested, all.size()));
             if (expectedTotal != null && all.size() > expectedTotal) { issues.add("实际记录数超过接口总人数"); break; }
             if (Boolean.FALSE.equals(page.hasMore())) {
                 if (expectedTotal == null || all.size() == expectedTotal) complete = true;

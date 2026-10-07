@@ -1,6 +1,6 @@
 # Binance 交易赛排行榜统计工具
 
-Java 17 命令行工具。读取指定活动的 Binance 排行榜，按实际排名筛选并累计交易量；提供奖池参数时输出理论奖励估算。2026-10-07 已对活动 `100027837` 完成公开请求验证：榜单路径为 `data.resourceSummaryList.data`，排名字段 `sequence`，交易量字段 `tradingVolume`，页码从 1 开始，`pageSize=100` 可用。交易量单位及活动奖励规则仍需核对。程序遇到不明确的字段、页间重叠或请求失败会标记 `INCOMPLETE`，不会把部分数据当成最终统计。
+Java 17 本地工具，提供命令行与浏览器配置页面。读取指定活动的 Binance 排行榜，按实际排名筛选并累计交易量；提供奖池参数时输出理论奖励估算。2026-10-07 已对活动 `100027837` 完成公开请求验证：榜单路径为 `data.resourceSummaryList.data`，排名字段 `sequence`，交易量字段 `tradingVolume`，页码从 1 开始，`pageSize=100` 可用。交易量单位及活动奖励规则仍需核对。程序遇到不明确的字段、页间重叠或请求失败会标记 `INCOMPLETE`，不会把部分数据当成最终统计。
 
 ## 构建
 
@@ -11,6 +11,16 @@ mvn clean test
 mvn clean package
 java -jar target/binance-leaderboard-stat.jar --help
 ```
+
+## 浏览器配置页面
+
+```bash
+java -jar target/binance-leaderboard-stat.jar --web
+```
+
+然后在本机打开 `http://127.0.0.1:8787/`。端口占用时可用 `--web --webPort=8788`。页面可配置活动 ID、起始排名、奖池、奖励币种、个人封顶、多个账户交易量；高级设置包含每页条数、最大页数、请求间隔、接口字段映射和导出目录。抓取进度与结果在页面展示，可直接下载 JSON、CSV。一次只运行一个抓取任务。
+
+服务只监听 `127.0.0.1`，并检查页面请求来源。Cookie、CSRF Token、UUID 不在页面输入或存储，仍由启动进程从环境变量读取。奖池和个人封顶默认留空，页面不会把示例的 40,000 USDC 或 30 USDC 当作真实活动规则。关闭运行程序的终端即可停止页面服务。
 
 ## 运行
 
