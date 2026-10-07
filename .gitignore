@@ -1,0 +1,7 @@
+target/
+.env
+.env.*
+*.secrets
+result-*.json
+result-*.csv
+*.swp
