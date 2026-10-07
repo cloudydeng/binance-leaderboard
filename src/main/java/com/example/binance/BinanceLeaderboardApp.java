@@ -19,7 +19,7 @@ public class BinanceLeaderboardApp {
 
     static int run(String[] args) {
         if (args.length == 1 && args[0].equals("--help")) {
-            System.out.println(Options.help() + "\n页面模式: java -jar target/binance-leaderboard-stat.jar --web [--webPort=8787]");
+            System.out.println(Options.help() + "\n页面模式: java -jar target/binance-leaderboard-stat.jar --web [--webPort=8787] [--webOrigin=https://域名]");
             return 0;
         }
         if (args.length > 0 && args[0].equals("--web")) return runWeb(args);
@@ -44,16 +44,20 @@ public class BinanceLeaderboardApp {
 
     private static int runWeb(String[] args) {
         int port = 8787;
-        if (args.length > 2 || (args.length == 2 && !args[1].startsWith("--webPort="))) {
-            System.err.println("页面模式只接受可选参数 --webPort=端口"); return 1;
-        }
-        if (args.length == 2) {
-            try { port = Integer.parseInt(args[1].substring("--webPort=".length())); }
-            catch (NumberFormatException e) { System.err.println("webPort 必须是整数"); return 1; }
+        String webOrigin = null;
+        for (int i = 1; i < args.length; i++) {
+            if (args[i].startsWith("--webPort=")) {
+                try { port = Integer.parseInt(args[i].substring("--webPort=".length())); }
+                catch (NumberFormatException e) { System.err.println("webPort 必须是整数"); return 1; }
+            } else if (args[i].startsWith("--webOrigin=")) {
+                webOrigin = args[i].substring("--webOrigin=".length());
+            } else {
+                System.err.println("页面模式只接受 --webPort 和 --webOrigin"); return 1;
+            }
         }
         try {
             BinanceLeaderboardClient client = new BinanceLeaderboardClient();
-            LocalWebServer web = new LocalWebServer(port, client::fetchPage, Path.of("."));
+            LocalWebServer web = new LocalWebServer(port, client::fetchPage, Path.of("."), webOrigin);
             Runtime.getRuntime().addShutdownHook(new Thread(web::close));
             web.start();
             System.out.println("本地配置页面已启动：" + web.url());

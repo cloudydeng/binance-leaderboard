@@ -22,6 +22,10 @@ java -jar target/binance-leaderboard-stat.jar --web
 
 服务只监听 `127.0.0.1`，并检查页面请求来源。Cookie、CSRF Token、UUID 不在页面输入或存储，仍由启动进程从环境变量读取。奖池和个人封顶默认留空，页面不会把示例的 40,000 USDC 或 30 USDC 当作真实活动规则。关闭运行程序的终端即可停止页面服务。
 
+### 服务器子路径
+
+在反向代理下可用 `--webOrigin=https://8.216.38.70` 接受该 HTTPS 页面的同源请求；静态资源和 API 使用相对路径，因此可挂载在 `/leaderboard/`。仓库的 `deploy/` 包含 systemd 服务和 Nginx 路由示例。服务器必须对整个子路径应用认证；示例通过交易控制台的登录会话验证。服务仍只监听 `127.0.0.1`，并以独立的受限 systemd 用户运行，结果写入 `/var/lib/binance-leaderboard`。
+
 ## 运行
 
 ```bash

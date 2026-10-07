@@ -23,12 +23,15 @@ class WebServerTest {
                   {"rank":2,"userId":"masked","tradeVolume":"1"}],
                   "total":2,"hasMore":false}}
                 """);
-        try (LocalWebServer server = new LocalWebServer(0, (id, page, size) -> fixture, temp)) {
+        try (LocalWebServer server = new LocalWebServer(0, (id, page, size) -> fixture, temp, "https://8.216.38.70")) {
             server.start();
             String base = server.url();
             var html = get(base);
             assertEquals(200, html.statusCode());
             assertTrue(html.body().contains("活动 resourceId"));
+            assertTrue(html.body().contains("href=\"style.css\""));
+            assertTrue(html.body().contains("src=\"app.js\""));
+            assertTrue(html.body().contains("href=\"api/result.csv\""));
             assertFalse(html.body().contains("value=\"40000\""));
 
             String token = mapper.readTree(get(base + "api/config").body()).path("csrfToken").asText();
@@ -40,7 +43,7 @@ class WebServerTest {
             assertEquals(403, post(base, body, token, "https://evil.example").statusCode());
             assertEquals(400, post(base, "{\"resourceId\":\"12\",\"rewardPool\":\"0\"}", token, null).statusCode());
             assertEquals(400, post(base, "{\"resourceId\":\"12\",\"outputDir\":\"relative-dir\"}", token, null).statusCode());
-            assertEquals(202, post(base, body, token, null).statusCode());
+            assertEquals(202, post(base, body, token, "https://8.216.38.70").statusCode());
 
             JsonNode status = null;
             for (int i = 0; i < 50; i++) {

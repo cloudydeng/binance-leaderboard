@@ -1,0 +1,24 @@
+[Unit]
+Description=Binance leaderboard statistics page
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=binance-leaderboard
+WorkingDirectory=/var/lib/binance-leaderboard
+ExecStart=/usr/bin/java -Xms32m -Xmx256m -jar /opt/binance-leaderboard/target/binance-leaderboard-stat.jar --web --webPort=8787 --webOrigin=https://8.216.38.70
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/binance-leaderboard
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

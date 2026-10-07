@@ -6,6 +6,12 @@ let pollTimer = null;
 const byId = id => document.getElementById(id);
 const show = (element, visible) => { element.hidden = !visible; };
 const value = text => text == null || text === '' ? '—' : String(text);
+async function readJson(response) {
+  if (!(response.headers.get('content-type') || '').includes('application/json')) {
+    throw new Error('登录状态可能已失效，请先登录控制台再刷新页面');
+  }
+  return response.json();
+}
 
 function setStatus(state) {
   const badge = byId('status-badge');
@@ -76,9 +82,9 @@ function renderResult(result) {
 
 async function loadStatus() {
   try {
-    const response = await fetch('/api/status', { cache: 'no-store' });
+    const response = await fetch('api/status', { cache: 'no-store' });
     if (!response.ok) throw new Error('无法读取运行状态');
-    setStatus(await response.json());
+    setStatus(await readJson(response));
   } catch (error) {
     byId('status-message').textContent = error.message;
   }
@@ -95,12 +101,12 @@ form.addEventListener('submit', async event => {
   runButton.disabled = true;
   byId('status-message').textContent = '正在提交配置…';
   try {
-    const response = await fetch('/api/run', {
+    const response = await fetch('api/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
       body: JSON.stringify(data)
     });
-    const result = await response.json();
+    const result = await readJson(response);
     if (!response.ok) throw new Error(result.error || '提交失败');
     await loadStatus();
   } catch (error) {
@@ -111,9 +117,9 @@ form.addEventListener('submit', async event => {
 
 (async () => {
   try {
-    const response = await fetch('/api/config', { cache: 'no-store' });
+    const response = await fetch('api/config', { cache: 'no-store' });
     if (!response.ok) throw new Error('无法连接本地服务');
-    csrfToken = (await response.json()).csrfToken;
+    csrfToken = (await readJson(response)).csrfToken;
     await loadStatus();
   } catch (error) {
     byId('status-message').textContent = error.message;

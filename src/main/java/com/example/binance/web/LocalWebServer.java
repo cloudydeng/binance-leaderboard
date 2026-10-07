@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.MessageDigest;
@@ -33,14 +34,30 @@ public class LocalWebServer implements AutoCloseable {
     private final Path defaultOutputDir;
     private final ObjectMapper mapper = new ObjectMapper();
     private final String csrfToken;
+    private final String allowedOrigin;
     private final AtomicReference<Snapshot> snapshot = new AtomicReference<>(new Snapshot("IDLE", "等待开始", 0, 0, null, null));
 
     private record Snapshot(String status, String message, int pagesRequested, int recordsRead,
                             LeaderboardStatistics result, Path outputDir) {}
 
     public LocalWebServer(int port, LeaderboardStatisticsService.PageSource source, Path defaultOutputDir) throws IOException {
+        this(port, source, defaultOutputDir, null);
+    }
+
+    public LocalWebServer(int port, LeaderboardStatisticsService.PageSource source, Path defaultOutputDir,
+                          String allowedOrigin) throws IOException {
         if (port < 0 || port > 65535) throw new IllegalArgumentException("webPort 必须在 0–65535 之间");
+        if (allowedOrigin != null) {
+            URI origin;
+            try { origin = URI.create(allowedOrigin); }
+            catch (IllegalArgumentException e) { throw new IllegalArgumentException("webOrigin 必须是有效的 HTTP(S) 来源地址"); }
+            if (!("https".equals(origin.getScheme()) || "http".equals(origin.getScheme())) ||
+                    origin.getHost() == null || origin.getRawUserInfo() != null || origin.getRawQuery() != null ||
+                    origin.getRawFragment() != null || (origin.getRawPath() != null && !origin.getRawPath().isEmpty()))
+                throw new IllegalArgumentException("webOrigin 必须是无路径的 HTTP(S) 来源地址");
+        }
         this.source = source;
+        this.allowedOrigin = allowedOrigin;
         this.defaultOutputDir = defaultOutputDir.toAbsolutePath().normalize();
         this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         this.server.createContext("/", this::handle);
@@ -84,7 +101,8 @@ public class LocalWebServer implements AutoCloseable {
     }
     private boolean validOrigin(HttpExchange exchange) {
         String origin = exchange.getRequestHeaders().getFirst("Origin");
-        return origin == null || origin.equals("http://127.0.0.1:" + port()) || origin.equals("http://localhost:" + port());
+        return origin == null || origin.equals("http://127.0.0.1:" + port()) ||
+                origin.equals("http://localhost:" + port()) || origin.equals(allowedOrigin);
     }
     private boolean validCsrf(HttpExchange exchange) {
         String supplied = exchange.getRequestHeaders().getFirst("X-CSRF-Token");
