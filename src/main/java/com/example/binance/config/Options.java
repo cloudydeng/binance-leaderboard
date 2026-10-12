@@ -23,6 +23,8 @@ public record Options(String resourceId, int startRank, int pageSize, int maxPag
         }
         String resourceId = values.get("resourceId");
         if (resourceId == null || !resourceId.matches("[1-9][0-9]*")) throw new IllegalArgumentException("--resourceId 必填且必须是正整数");
+        if (resourceId.equals("100030535"))
+            throw new IllegalArgumentException("100030535 是活动组 ID；本期主奖励榜请使用 100030536");
         try { Long.parseLong(resourceId); }
         catch (NumberFormatException e) { throw new IllegalArgumentException("resourceId 超出整数范围"); }
         int startRank = positiveInt(values, "startRank", 1001);

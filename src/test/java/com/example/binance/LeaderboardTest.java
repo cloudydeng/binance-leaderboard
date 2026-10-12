@@ -150,6 +150,8 @@ class LeaderboardTest {
         assertEquals(new BigDecimal("0.05"), estimate.accounts().get(0).capped());
         assertThrows(IllegalArgumentException.class, () -> options("--rewardPool=0"));
         assertThrows(IllegalArgumentException.class, () -> options("--volumes=1,broken", "--rewardPool=2"));
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> Options.parse(new String[]{"--resourceId=100030535"})).getMessage().contains("100030536"));
     }
 
     @Test void httpClientHandlesAuthAndRetriesServerErrorWithoutLeakingCookie() throws Exception {
