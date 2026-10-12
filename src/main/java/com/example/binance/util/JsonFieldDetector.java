@@ -23,8 +23,10 @@ public class JsonFieldDetector {
         } else {
             List<String> candidates = new ArrayList<>();
             findArrays(root, "", candidates, 0);
-            if (candidates.size() != 1) throw new IllegalArgumentException("无法唯一识别排行榜数组，请指定 --entriesPath；结构：" + shape(root));
-            path = candidates.get(0);
+            if (candidates.size() == 1) path = candidates.get(0);
+            else if (candidates.isEmpty() && at(root, "data.resourceSummaryList.data").isArray())
+                path = "data.resourceSummaryList.data";
+            else throw new IllegalArgumentException("无法唯一识别排行榜数组，请指定 --entriesPath；结构：" + shape(root));
             array = at(root, path);
         }
         String rankField = selectField(array, previous == null ? options.rankField() : previous.rankField(), RANK, "rankField", true);

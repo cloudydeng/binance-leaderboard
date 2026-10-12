@@ -80,6 +80,11 @@ public class LeaderboardStatisticsService {
                 }
                 eligibleTradingVolume = page.eligibleTradingVolume();
             }
+            if (pageIndex == 1 && page.entries().isEmpty()) {
+                issues.add("第 1 页榜单为空（接口 total=" + (expectedTotal == null ? "未知" : expectedTotal)
+                        + "）；无法据此统计，请核对 resourceId 和接口访问条件");
+                break;
+            }
             if (pageIndex == 1 && !page.entries().isEmpty() && page.entries().size() < pageSize &&
                     !Boolean.FALSE.equals(page.hasMore()) &&
                     (expectedTotal == null || expectedTotal > page.entries().size())) {

@@ -119,6 +119,20 @@ class LeaderboardTest {
         assertEquals("INCOMPLETE", limited.completeness());
     }
 
+    @Test void knownEmptyFirstPageReportsIncompleteInsteadOfParserFailureOrZeroResult() throws Exception {
+        JsonNode empty = json("""
+                {"code":"000000","success":true,"data":{"resourceSummaryList":
+                {"pageIndex":1,"pageSize":10,"data":[],"total":0}}}
+                """);
+        var result = new LeaderboardStatisticsService((id, index, size) -> empty)
+                .collect(Options.parse(new String[]{"--resourceId=100030536", "--pageSize=10", "--delayMs=0"}));
+        assertEquals("INCOMPLETE", result.completeness());
+        assertEquals(1, result.pagesRequested());
+        assertEquals("data.resourceSummaryList.data", result.entriesPath());
+        assertTrue(result.issues().get(0).contains("榜单为空（接口 total=0）"));
+        assertNull(result.rewardEstimate());
+    }
+
     @Test void twoEmptyPagesConfirmEndWithoutPaginationMetadata() throws Exception {
         JsonNode first = json("{\"data\":{\"list\":[{\"rank\":1,\"tradeVolume\":\"0.02\"},{\"rank\":2,\"tradeVolume\":\"0.01\"}]}}" );
         JsonNode empty = json("{\"data\":{\"list\":[]}}" );
