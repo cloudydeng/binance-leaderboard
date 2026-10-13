@@ -4,6 +4,9 @@ import com.example.binance.client.BinanceLeaderboardClient;
 import com.example.binance.config.Options;
 import com.example.binance.model.LeaderboardStatistics;
 import com.example.binance.service.LeaderboardStatisticsService;
+import com.example.binance.service.CachedLeaderboardService;
+import com.example.binance.service.LeaderboardSnapshotCache;
+import com.example.binance.telegram.TelegramNotifier;
 import com.example.binance.util.ResultWriter;
 import com.example.binance.web.LocalWebServer;
 import java.io.IOException;
@@ -19,8 +22,23 @@ public class BinanceLeaderboardApp {
 
     static int run(String[] args) {
         if (args.length == 1 && args[0].equals("--help")) {
-            System.out.println(Options.help() + "\n页面模式: java -jar target/binance-leaderboard-stat.jar --web [--webPort=8787] [--webOrigin=https://域名]");
+            System.out.println(Options.help() + "\n页面模式: java -jar target/binance-leaderboard-stat.jar --web [--webPort=8787] [--webOrigin=https://域名]"
+                    + "\n查询 Telegram Chat ID: java -jar target/binance-leaderboard-stat.jar --telegram-chat-id");
             return 0;
+        }
+        if (args.length == 1 && args[0].equals("--telegram-chat-id")) {
+            try {
+                var ids = TelegramNotifier.chatIdsFromEnvironment();
+                if (ids.isEmpty()) System.out.println("未发现消息；请先在 Telegram 向新机器人发送 /start 再试");
+                else ids.forEach(id -> System.out.println("Chat ID: " + id));
+                return 0;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.err.println("查询被中断");
+            } catch (IOException | IllegalArgumentException e) {
+                System.err.println("查询 Chat ID 失败：请检查 Bot Token、网络和机器人是否设置了 webhook");
+            }
+            return 2;
         }
         if (args.length > 0 && args[0].equals("--web")) return runWeb(args);
         Options options;
@@ -28,9 +46,22 @@ public class BinanceLeaderboardApp {
         catch (IllegalArgumentException e) { System.err.println("参数错误：" + e.getMessage() + "\n" + Options.help()); return 1; }
         try {
             BinanceLeaderboardClient client = new BinanceLeaderboardClient();
-            LeaderboardStatistics result = new LeaderboardStatisticsService(client::fetchPage).collect(options);
+            var outcome = new CachedLeaderboardService(client::fetchPage,
+                    new LeaderboardSnapshotCache(options.outputDir().resolve("cache")), progress -> {})
+                    .collect(options);
+            LeaderboardStatistics result = outcome.result();
             new ResultWriter().write(result, options.outputDir());
             print(result);
+            if (outcome.cacheWarning() != null) System.out.println("缓存提示: " + outcome.cacheWarning());
+            try {
+                TelegramNotifier notifier = TelegramNotifier.fromEnvironment();
+                if (notifier != null) { notifier.send(result); System.out.println("Telegram 通知: 已发送"); }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.err.println("Telegram 通知被中断");
+            } catch (IOException | IllegalArgumentException e) {
+                System.err.println("Telegram 通知失败：请核对机器人 Token、Chat ID 和网络");
+            }
             return result.completeness().equals("COMPLETE") ? 0 : 2;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -74,6 +105,7 @@ public class BinanceLeaderboardApp {
 
     private static void print(LeaderboardStatistics r) {
         System.out.println("活动 ID: " + r.resourceId());
+        System.out.println("数据来源: " + ("CACHE".equals(r.dataSource()) ? "本地缓存" : "Binance 接口"));
         if (r.leaderboardUpdatedAt() != null) System.out.println("榜单数据更新时间 (UTC): " + r.leaderboardUpdatedAt());
         System.out.println("排名范围: " + r.startRank() + "–" + (r.maxRank() == null ? "未知" : r.maxRank()));
         System.out.println("完整性: " + r.completeness() + (r.completeness().equals("INCOMPLETE") ? "（未完成，不可作为最终数）" : ""));

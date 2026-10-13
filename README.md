@@ -18,7 +18,23 @@ java -jar target/binance-leaderboard-stat.jar --help
 java -jar target/binance-leaderboard-stat.jar --web
 ```
 
-然后在本机打开 `http://127.0.0.1:8787/`。端口占用时可用 `--web --webPort=8788`。页面可配置活动 ID、起始排名、奖池、奖励币种、个人封顶、多个账户交易量；高级设置包含每页条数、最大页数、请求间隔、接口字段映射和导出目录。多个账户交易量以空格分隔，例如 `12,572.05046 20,180.18002`，数字可带千分位逗号。完整抓取后会按榜单交易量推算每个输入值的名次，无需奖池；填写奖池后另显示理论奖励。抓取进度与结果在页面展示；结果同时显示币安接口提供的榜单更新时间和本次抓取时间（北京时间），可直接下载 JSON、CSV。参数错误会在提交按钮和状态区显示，修改参数后旧结果暂时隐藏，避免误认为已按新参数重新计算。一次只运行一个抓取任务。
+然后在本机打开 `http://127.0.0.1:8787/`。端口占用时可用 `--web --webPort=8788`。页面可配置活动 ID、起始排名、奖池、奖励币种、个人封顶、多个账户交易量；高级设置包含每页条数、最大页数、请求间隔、接口字段映射和导出目录。多个账户交易量以空格分隔，例如 `12,572.05046 20,180.18002`，数字可带千分位逗号。完整抓取后会按榜单交易量推算每个输入值的名次，无需奖池；填写奖池后另显示理论奖励。抓取进度与结果在页面展示；结果同时显示币安接口提供的榜单更新时间、原始抓取时间、数据来源和 Telegram 通知状态（北京时间），可直接下载 JSON、CSV。参数错误会在提交按钮和状态区显示，修改参数后旧结果暂时隐藏，避免误认为已按新参数重新计算。一次只运行一个任务。
+
+### 本地榜单缓存
+
+完整榜单按 `resourceId / Binance updatedTime` 保存在启动目录的 `cache/` 下；服务器为 `/var/lib/binance-leaderboard/cache/`。例如榜单更新时间为北京时间 `2026-10-13 11:59:59` 时，文件名使用对应的 UTC 毫秒时间戳。仅保存完整、通过汇总核对、且接口提供更新时间的全榜快照；不保存页面输入的个人交易量或奖池。重复查询同一活动时直接读取本地最新快照，按当前起始排名、账户交易量和奖池重新计算，不请求 Binance。页面会显示“本地缓存”；命令行可用 `--refresh=true`，页面可勾选“重新抓取币安榜单”以强制更新。
+
+不访问 Binance 时无法自动知道其榜单是否更新。需要最新数据时主动重新抓取；如果抓取不完整，新数据不会覆盖完整缓存。缓存文件只允许本机运行账户读写。
+
+### Telegram 通知
+
+可选。设置 `TELEGRAM_BOT_TOKEN` 和 `TELEGRAM_CHAT_ID` 后，每次计算完成（包括从缓存重新计算）都会发送一条结果摘要；发送失败不会丢失计算结果，页面会显示通知状态。机器人凭据只从进程环境变量读取，不进页面、缓存、导出文件或 Git。
+
+1. 在 Telegram 打开 [@BotFather](https://t.me/BotFather)，发送 `/newbot`，按提示设置名称和用户名，保存生成的 Token。向新机器人发送 `/start`。
+2. 在运行工具的终端安全设置 `TELEGRAM_BOT_TOKEN`，执行 `java -jar target/binance-leaderboard-stat.jar --telegram-chat-id`。命令只打印从 Telegram `getUpdates` 找到的 Chat ID，不打印 Token。若显示没有消息，先向机器人再发一条消息后重试。机器人若已有 webhook，需先关闭 webhook 才能使用 `getUpdates`。
+3. 设置 `TELEGRAM_CHAT_ID` 并重启程序。服务器 systemd 可在 root 专用的 `/etc/binance-leaderboard/telegram.env` 写入两行 `TELEGRAM_BOT_TOKEN=...` 与 `TELEGRAM_CHAT_ID=...`，权限设为 `0600` 后执行 `systemctl restart binance-leaderboard`。服务文件会读取此文件；文件不存在时通知功能保持关闭。
+
+请勿把 Token 发到聊天、命令参数或 Git；如果泄露，通过 @BotFather 重新生成。
 
 服务只监听 `127.0.0.1`，并检查页面请求来源。Cookie、CSRF Token、UUID 不在页面输入或存储，仍由启动进程从环境变量读取。奖池和个人封顶默认留空，页面不会把示例的 40,000 USDC 或 30 USDC 当作真实活动规则。关闭运行程序的终端即可停止页面服务。
 
@@ -34,7 +50,7 @@ java -jar target/binance-leaderboard-stat.jar \
   --rewardPool=40000 --rewardUnit=USDC --maxReward=30
 ```
 
-`--resourceId` 必填；`--startRank` 默认 1001，`--pageSize` 默认 100，`--maxPages` 默认 1000，`--delayMs` 默认 450。多个账户的交易量用 `--volumes='12,572.05046 20,180.18002'`，旧版英文逗号列表仍兼容。默认在当前目录写 `result-<resourceId>.json` 与 `.csv`，可用 `--outputDir` 改目录。`INCOMPLETE` 的 CSV 首行有醒目标记，JSON 有完整性状态及原因；命令退出码为 2。
+`--resourceId` 必填；`--startRank` 默认 1001，`--pageSize` 默认 100，`--maxPages` 默认 1000，`--delayMs` 默认 450。多个账户的交易量用 `--volumes='12,572.05046 20,180.18002'`，旧版英文逗号列表仍兼容。默认在当前目录写 `result-<resourceId>.json` 与 `.csv`，可用 `--outputDir` 改目录。`INCOMPLETE` 的 CSV 首行有醒目标记，JSON 有完整性状态及原因；命令退出码为 2。`--refresh=true` 跳过本地缓存。
 
 如果返回结构不能唯一识别，需要根据**实际响应**指定映射：
 

@@ -7,10 +7,10 @@ import java.util.*;
 public record Options(String resourceId, int startRank, int pageSize, int maxPages, int delayMs,
                       BigDecimal rewardPool, String rewardUnit, BigDecimal maxReward,
                       List<BigDecimal> volumes, String entriesPath, String rankField,
-                      String volumeField, String userIdField, Path outputDir) {
+                      String volumeField, String userIdField, Path outputDir, boolean refresh) {
     private static final Set<String> KEYS = Set.of("resourceId", "startRank", "pageSize", "maxPages", "delayMs",
             "rewardPool", "rewardUnit", "maxReward", "volumes", "entriesPath", "rankField",
-            "volumeField", "userIdField", "outputDir");
+            "volumeField", "userIdField", "outputDir", "refresh");
 
     public static Options parse(String[] args) {
         Map<String, String> values = new HashMap<>();
@@ -59,13 +59,21 @@ public record Options(String resourceId, int startRank, int pageSize, int maxPag
         String rankField = values.get("rankField");
         String volumeField = values.get("volumeField");
         String userIdField = values.get("userIdField");
+        String refreshValue = values.getOrDefault("refresh", "false");
+        if (!refreshValue.equals("true") && !refreshValue.equals("false"))
+            throw new IllegalArgumentException("refresh 必须是 true 或 false");
         for (String field : List.of(entriesPath == null ? "" : entriesPath, rankField == null ? "" : rankField,
                 volumeField == null ? "" : volumeField, userIdField == null ? "" : userIdField)) {
             if (!field.isEmpty() && !field.matches("[A-Za-z0-9_.]+")) throw new IllegalArgumentException("字段路径只允许字母、数字、下划线和点");
         }
         return new Options(resourceId, startRank, pageSize, maxPages, delayMs, rewardPool, unit, maxReward,
                 List.copyOf(volumes), entriesPath, rankField, volumeField, userIdField,
-                Path.of(values.getOrDefault("outputDir", ".")));
+                Path.of(values.getOrDefault("outputDir", ".")), Boolean.parseBoolean(refreshValue));
+    }
+
+    public Options forFullLeaderboard() {
+        return new Options(resourceId, 1, pageSize, maxPages, delayMs, null, "", null,
+                List.of(), entriesPath, rankField, volumeField, userIdField, outputDir, refresh);
     }
 
     private static int positiveInt(Map<String, String> m, String k, int defaultValue) {
@@ -93,6 +101,7 @@ public record Options(String resourceId, int startRank, int pageSize, int maxPag
                 + "--rewardPool=40000 --rewardUnit=USDC --maxReward=30（奖励参数仅作示例）\n"
                 + "--entriesPath=data.resourceSummaryList.data --rankField=sequence --volumeField=tradingVolume [--userIdField=userId]\n"
                 + "--outputDir=.  结构无法自动确认时必须显式指定字段映射。\n"
+                + "--refresh=true  忽略本地缓存，重新从 Binance 抓取。\n"
                 + "身份信息仅从 BINANCE_COOKIE / BINANCE_CSRF_TOKEN / BINANCE_UUID 环境变量读取。";
     }
 }

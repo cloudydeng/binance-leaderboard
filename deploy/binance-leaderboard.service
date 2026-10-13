@@ -8,6 +8,7 @@ Type=simple
 DynamicUser=yes
 StateDirectory=binance-leaderboard
 WorkingDirectory=/var/lib/binance-leaderboard
+EnvironmentFile=-/etc/binance-leaderboard/telegram.env
 ExecStart=/usr/bin/java -Xms32m -Xmx256m -jar /opt/binance-leaderboard/target/binance-leaderboard-stat.jar --web --webPort=8787 --webOrigin=https://8.216.38.70
 Restart=on-failure
 RestartSec=5

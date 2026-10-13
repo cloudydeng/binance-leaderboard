@@ -173,10 +173,36 @@ public class LeaderboardStatisticsService {
         LeaderboardStatistics.RewardEstimate reward = complete && total.signum() > 0 && options.rewardPool() != null
                 ? estimate(options, total) : null;
         return new LeaderboardStatistics(options.resourceId(), options.startRank(), options.pageSize(), pageSize,
-                requested, Instant.now().toString(), updatedTime == null ? null : Instant.ofEpochMilli(updatedTime).toString(),
+                requested, Instant.now().toString(), updatedTime == null ? null : Instant.ofEpochMilli(updatedTime).toString(), "BINANCE",
                 complete ? "COMPLETE" : "INCOMPLETE", List.copyOf(issues),
                 selected.size(), total, average, all.isEmpty() ? null : all.get(all.size() - 1).rank(), rank1000,
                 volumeField, entriesPath, "UNVERIFIED_RULES", eligibleUserCount, eligibleTradingVolume,
+                List.copyOf(selected), volumeRanks, reward);
+    }
+
+    /** Reapply local ranking and reward inputs to a previously fetched full leaderboard. */
+    public static LeaderboardStatistics recalculate(Options options, LeaderboardStatistics full, boolean cached) {
+        if (!options.resourceId().equals(full.resourceId()) || full.startRank() != 1 || full.entries() == null)
+            throw new IllegalArgumentException("缓存榜单与活动参数不匹配");
+        List<LeaderboardEntry> all = full.entries();
+        List<LeaderboardEntry> selected = all.stream().filter(entry -> entry.rank() >= options.startRank()).toList();
+        BigDecimal total = selected.stream().map(LeaderboardEntry::volume).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal average = selected.isEmpty() ? BigDecimal.ZERO
+                : total.divide(BigDecimal.valueOf(selected.size()), MathContext.DECIMAL128);
+        BigDecimal rank1000 = all.stream().filter(entry -> entry.rank() == 1000L)
+                .findFirst().map(LeaderboardEntry::volume).orElse(null);
+        boolean complete = "COMPLETE".equals(full.completeness());
+        List<LeaderboardStatistics.VolumeRank> volumeRanks = complete
+                ? options.volumes().stream().map(volume ->
+                        new LeaderboardStatistics.VolumeRank(volume, rankForVolume(all, volume))).toList()
+                : List.of();
+        LeaderboardStatistics.RewardEstimate reward = complete && total.signum() > 0 && options.rewardPool() != null
+                ? estimate(options, total) : null;
+        return new LeaderboardStatistics(options.resourceId(), options.startRank(), options.pageSize(),
+                full.effectivePageSize(), full.pagesRequested(), full.fetchedAt(), full.leaderboardUpdatedAt(),
+                cached ? "CACHE" : "BINANCE", full.completeness(), full.issues(), selected.size(), total,
+                average, full.maxRank(), rank1000, full.volumeField(), full.entriesPath(),
+                full.qualificationStatus(), full.serverEligibleUserCount(), full.serverEligibleTradingVolume(),
                 List.copyOf(selected), volumeRanks, reward);
     }
 

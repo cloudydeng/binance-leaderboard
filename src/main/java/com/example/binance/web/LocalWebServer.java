@@ -2,7 +2,8 @@ package com.example.binance.web;
 
 import com.example.binance.config.Options;
 import com.example.binance.model.LeaderboardStatistics;
-import com.example.binance.service.LeaderboardStatisticsService;
+import com.example.binance.service.*;
+import com.example.binance.telegram.TelegramNotifier;
 import com.example.binance.util.ResultWriter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,11 +28,15 @@ public class LocalWebServer implements AutoCloseable {
     private static final int MAX_REQUEST_BYTES = 16_384;
     private static final Set<String> FIELDS = Set.of("resourceId", "startRank", "pageSize", "maxPages", "delayMs",
             "rewardPool", "rewardUnit", "maxReward", "volumes", "entriesPath", "rankField",
-            "volumeField", "userIdField", "outputDir");
+            "volumeField", "userIdField", "outputDir", "refresh");
     private final HttpServer server;
     private final ExecutorService workers = Executors.newFixedThreadPool(3);
     private final LeaderboardStatisticsService.PageSource source;
     private final Path defaultOutputDir;
+    private final LeaderboardSnapshotCache cache;
+    private final TelegramNotifier telegram;
+    private final String telegramConfigError;
+    private final AtomicReference<String> telegramStatus = new AtomicReference<>("未配置");
     private final ObjectMapper mapper = new ObjectMapper();
     private final String csrfToken;
     private final String allowedOrigin;
@@ -59,6 +64,14 @@ public class LocalWebServer implements AutoCloseable {
         this.source = source;
         this.allowedOrigin = allowedOrigin;
         this.defaultOutputDir = defaultOutputDir.toAbsolutePath().normalize();
+        this.cache = new LeaderboardSnapshotCache(this.defaultOutputDir.resolve("cache"));
+        TelegramNotifier configured;
+        String configError = null;
+        try { configured = TelegramNotifier.fromEnvironment(); }
+        catch (IllegalArgumentException e) { configured = null; configError = "Telegram 配置错误：" + e.getMessage(); }
+        this.telegram = configured;
+        this.telegramConfigError = configError;
+        telegramStatus.set(configError != null ? configError : telegram == null ? "未配置" : "待发送");
         this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         this.server.createContext("/", this::handle);
         this.server.setExecutor(workers);
@@ -146,6 +159,7 @@ public class LocalWebServer implements AutoCloseable {
         synchronized (this) {
             if (snapshot.get().status().equals("RUNNING")) { sendJson(exchange, 409, Map.of("error", "已有抓取任务正在运行")); return; }
             snapshot.set(new Snapshot("RUNNING", "正在抓取排行榜", 0, 0, null, null));
+            telegramStatus.set(telegramConfigError != null ? telegramConfigError : telegram == null ? "未配置" : "等待计算完成");
             workers.submit(() -> runJob(options, outputDir));
         }
         sendJson(exchange, 202, Map.of("status", "RUNNING"));
@@ -153,13 +167,24 @@ public class LocalWebServer implements AutoCloseable {
 
     private void runJob(Options options, Path outputDir) {
         try {
-            var service = new LeaderboardStatisticsService(source, progress -> snapshot.updateAndGet(current ->
+            var service = new CachedLeaderboardService(source, cache, progress -> snapshot.updateAndGet(current ->
                     current.status().equals("RUNNING") ? new Snapshot("RUNNING", "正在抓取排行榜",
                             progress.pagesRequested(), progress.recordsRead(), null, null) : current));
-            LeaderboardStatistics result = service.collect(options);
+            var outcome = service.collect(options);
+            LeaderboardStatistics result = outcome.result();
             new ResultWriter().write(result, outputDir);
-            snapshot.set(new Snapshot(result.completeness(), result.completeness().equals("COMPLETE") ? "抓取完成" : "抓取未完成，请查看原因",
-                    result.pagesRequested(), result.rankFilteredCount() > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) result.rankFilteredCount(), result, outputDir));
+            if (telegram != null) {
+                telegramStatus.set("发送中");
+                try { telegram.send(result); telegramStatus.set("已发送"); }
+                catch (Exception e) { telegramStatus.set("发送失败，请核对机器人 Token、Chat ID 和网络"); }
+            }
+            String message = "CACHE".equals(result.dataSource()) ? "已从本地缓存计算" :
+                    result.completeness().equals("COMPLETE") ?
+                            (outcome.cacheWarning() == null ? "抓取完成并已缓存" : "抓取完成") : "抓取未完成，请查看原因";
+            if (outcome.cacheWarning() != null) message += "；" + outcome.cacheWarning();
+            snapshot.set(new Snapshot(result.completeness(), message,
+                    "CACHE".equals(result.dataSource()) ? 0 : result.pagesRequested(),
+                    result.rankFilteredCount() > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) result.rankFilteredCount(), result, outputDir));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             snapshot.set(new Snapshot("ERROR", "抓取被中断", 0, 0, null, null));
@@ -175,6 +200,7 @@ public class LocalWebServer implements AutoCloseable {
         data.put("message", current.message());
         data.put("pagesRequested", current.pagesRequested());
         data.put("recordsRead", current.recordsRead());
+        data.put("telegramStatus", telegramStatus.get());
         LeaderboardStatistics result = current.result();
         if (result != null) {
             Map<String, Object> summary = new LinkedHashMap<>();
@@ -183,6 +209,7 @@ public class LocalWebServer implements AutoCloseable {
             summary.put("maxRank", result.maxRank());
             summary.put("fetchedAt", result.fetchedAt());
             summary.put("leaderboardUpdatedAt", result.leaderboardUpdatedAt());
+            summary.put("dataSource", result.dataSource());
             summary.put("completeness", result.completeness());
             summary.put("issues", result.issues());
             summary.put("rankFilteredCount", result.rankFilteredCount());

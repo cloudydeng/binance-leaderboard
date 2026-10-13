@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 public record LeaderboardStatistics(String resourceId, int startRank, int requestedPageSize, int effectivePageSize,
-                                    int pagesRequested, String fetchedAt, String leaderboardUpdatedAt,
+                                    int pagesRequested, String fetchedAt, String leaderboardUpdatedAt, String dataSource,
                                     String completeness, List<String> issues,
                                     long rankFilteredCount, BigDecimal totalVolume, BigDecimal averageVolume,
                                     Long maxRank, BigDecimal rank1000Volume, String volumeField,

@@ -58,8 +58,10 @@
           </details>
 
           <div class="actions">
+            <label class="refresh-option"><input name="refresh" type="checkbox" value="true"><span>重新抓取币安榜单，更新本地缓存</span></label>
+            <p class="cache-hint">默认优先使用该活动本地保存的最新完整榜单。改排名、奖池或账户交易量时可直接重新计算；需要获取币安最新数据时勾选上方选项。</p>
             <p id="form-error" class="form-error" role="alert" hidden></p>
-            <button id="run-button" type="submit" disabled>开始抓取与计算 <span aria-hidden="true">↗</span></button>
+            <button id="run-button" type="submit" disabled>开始计算 <span aria-hidden="true">↗</span></button>
             <p>Cookie、CSRF Token、UUID 只从启动程序的环境变量读取，不在页面中输入。</p>
           </div>
         </form>
@@ -71,7 +73,9 @@
           <p id="status-message" class="status-message" role="status" aria-live="polite">准备就绪</p>
           <div id="status-times" class="status-times" hidden>
             <div>榜单数据更新时间：<strong id="leaderboard-updated-at"></strong></div>
-            <div>本次抓取时间：<strong id="fetched-at"></strong></div>
+            <div>原始抓取时间：<strong id="fetched-at"></strong></div>
+            <div>数据来源：<strong id="data-source"></strong></div>
+            <div>Telegram 通知：<strong id="telegram-status"></strong></div>
           </div>
           <div class="progress-row"><div><span>已请求页数</span><strong id="pages-value">0</strong></div><div><span id="records-label">已读取记录</span><strong id="records-value">0</strong></div></div>
           <div id="spinner" class="progress-line" hidden><div></div></div>

@@ -70,6 +70,8 @@ function setStatus(state) {
   if (matchesCurrentId) {
     byId('leaderboard-updated-at').textContent = beijingTime(state.result.leaderboardUpdatedAt);
     byId('fetched-at').textContent = beijingTime(state.result.fetchedAt);
+    byId('data-source').textContent = state.result.dataSource === 'CACHE' ? '本地缓存' : 'Binance 接口';
+    byId('telegram-status').textContent = value(state.telegramStatus);
     renderResult(state.result);
   }
 
@@ -178,6 +180,7 @@ form.addEventListener('submit', async event => {
     });
     const result = await readJson(response);
     if (!response.ok) throw new Error(result.error || '提交失败');
+    form.elements.namedItem('refresh').checked = false;
     setStatus({ status: 'RUNNING', message: '正在抓取排行榜', pagesRequested: 0, recordsRead: 0, result: null });
     await loadStatus();
   } catch (error) {

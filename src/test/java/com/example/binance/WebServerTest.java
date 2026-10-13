@@ -9,6 +9,7 @@ import java.net.URI;
 import java.net.http.*;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class WebServerTest {
@@ -23,7 +24,11 @@ class WebServerTest {
                   {"rank":2,"userId":"masked","tradeVolume":"1"}],
                   "total":2,"hasMore":false,"updatedTime":1791853199000}}
                 """);
-        try (LocalWebServer server = new LocalWebServer(0, (id, page, size) -> fixture, temp, "https://8.216.38.70")) {
+        AtomicInteger calls = new AtomicInteger();
+        try (LocalWebServer server = new LocalWebServer(0, (id, page, size) -> {
+            calls.incrementAndGet();
+            return fixture;
+        }, temp, "https://8.216.38.70")) {
             server.start();
             String base = server.url();
             var html = get(base);
@@ -62,6 +67,19 @@ class WebServerTest {
             assertEquals("5", result.path("rewardEstimate").path("accounts").get(0).path("capped").asText());
             assertEquals(200, get(base + "api/result.json").statusCode());
             assertTrue(get(base + "api/result.csv").body().contains("rank,userId,volume"));
+            assertEquals(1, calls.get());
+
+            assertEquals(202, post(base, "{\"resourceId\":\"12\",\"startRank\":\"1\",\"volumes\":\"1.5\"}", token, null).statusCode());
+            for (int i = 0; i < 50; i++) {
+                status = mapper.readTree(get(base + "api/status").body());
+                if (!status.path("status").asText().equals("RUNNING")) break;
+                Thread.sleep(50);
+            }
+            assertEquals("COMPLETE", status.path("status").asText());
+            assertEquals("CACHE", status.path("result").path("dataSource").asText());
+            assertEquals(0, status.path("pagesRequested").asInt());
+            assertEquals("3", status.path("result").path("totalVolume").asText());
+            assertEquals(1, calls.get());
         }
     }
 
