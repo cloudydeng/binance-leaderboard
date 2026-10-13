@@ -53,8 +53,9 @@ public class JsonFieldDetector {
         if (hasMore == null) hasMore = booleanField(root, "hasMore", "hasNext");
         Long eligibleCount = numericLong(root.path("data"), "eligibleUserCount");
         BigDecimal eligibleVolume = optionalVolume(root.path("data").get("eligibleTradingVolume"));
+        Long updatedTime = numericLong(root.path("data"), "updatedTime");
         return new LeaderboardPage(List.copyOf(entries), total, hasMore, reportedSize, volumeField, path,
-                rankField, idField, eligibleCount, eligibleVolume);
+                rankField, idField, eligibleCount, eligibleVolume, updatedTime);
     }
 
     private String selectField(JsonNode array, String specified, List<String> candidates, String option, boolean required) {

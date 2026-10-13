@@ -119,6 +119,21 @@ class LeaderboardTest {
         assertEquals("INCOMPLETE", limited.completeness());
     }
 
+    @Test void changedLeaderboardUpdateTimeMakesSnapshotIncomplete() throws Exception {
+        JsonNode first = json("""
+                {"data":{"list":[{"rank":1,"tradeVolume":2},{"rank":2,"tradeVolume":1}],
+                "total":4,"hasMore":true,"updatedTime":1791853199000}}
+                """);
+        JsonNode second = json("""
+                {"data":{"list":[{"rank":3,"tradeVolume":0.5},{"rank":4,"tradeVolume":0.1}],
+                "total":4,"hasMore":false,"updatedTime":1791853200000}}
+                """);
+        var result = new LeaderboardStatisticsService((id, index, size) -> index == 1 ? first : second)
+                .collect(options("--startRank=1"));
+        assertEquals("INCOMPLETE", result.completeness());
+        assertTrue(result.issues().get(0).contains("榜单更新时间"));
+    }
+
     @Test void knownEmptyFirstPageReportsIncompleteInsteadOfParserFailureOrZeroResult() throws Exception {
         JsonNode empty = json("""
                 {"code":"000000","success":true,"data":{"resourceSummaryList":

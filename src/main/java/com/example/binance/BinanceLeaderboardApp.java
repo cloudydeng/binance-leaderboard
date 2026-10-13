@@ -74,6 +74,7 @@ public class BinanceLeaderboardApp {
 
     private static void print(LeaderboardStatistics r) {
         System.out.println("活动 ID: " + r.resourceId());
+        if (r.leaderboardUpdatedAt() != null) System.out.println("榜单数据更新时间 (UTC): " + r.leaderboardUpdatedAt());
         System.out.println("排名范围: " + r.startRank() + "–" + (r.maxRank() == null ? "未知" : r.maxRank()));
         System.out.println("完整性: " + r.completeness() + (r.completeness().equals("INCOMPLETE") ? "（未完成，不可作为最终数）" : ""));
         for (String issue : r.issues()) System.out.println("原因: " + issue);

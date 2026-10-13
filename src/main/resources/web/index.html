@@ -58,6 +58,7 @@
           </details>
 
           <div class="actions">
+            <p id="form-error" class="form-error" role="alert" hidden></p>
             <button id="run-button" type="submit" disabled>开始抓取与计算 <span aria-hidden="true">↗</span></button>
             <p>Cookie、CSRF Token、UUID 只从启动程序的环境变量读取，不在页面中输入。</p>
           </div>
@@ -68,6 +69,10 @@
         <section class="panel status-panel" aria-labelledby="status-title">
           <div class="section-head"><div><span class="kicker">02 / 运行</span><h2 id="status-title">抓取状态</h2></div><span id="status-badge" class="status-badge idle">等待开始</span></div>
           <p id="status-message" class="status-message" role="status" aria-live="polite">准备就绪</p>
+          <div id="status-times" class="status-times" hidden>
+            <div>榜单数据更新时间：<strong id="leaderboard-updated-at"></strong></div>
+            <div>本次抓取时间：<strong id="fetched-at"></strong></div>
+          </div>
           <div class="progress-row"><div><span>已请求页数</span><strong id="pages-value">0</strong></div><div><span id="records-label">已读取记录</span><strong id="records-value">0</strong></div></div>
           <div id="spinner" class="progress-line" hidden><div></div></div>
           <ul id="issue-list" class="issue-list" hidden></ul>

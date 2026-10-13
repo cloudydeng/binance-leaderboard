@@ -40,6 +40,7 @@ public class LeaderboardStatisticsService {
         Long expectedTotal = null;
         Long eligibleUserCount = null;
         BigDecimal eligibleTradingVolume = null;
+        Long updatedTime = null;
         LeaderboardPage previousPage = null;
         for (int pageIndex = 1; pageIndex <= options.maxPages(); pageIndex++) {
             if (requested >= options.maxPages()) break;
@@ -80,6 +81,12 @@ public class LeaderboardStatisticsService {
                 }
                 eligibleTradingVolume = page.eligibleTradingVolume();
             }
+            if (page.updatedTime() != null) {
+                if (updatedTime != null && !updatedTime.equals(page.updatedTime())) {
+                    issues.add("榜单更新时间在抓取中变化，请重新抓取"); break;
+                }
+                updatedTime = page.updatedTime();
+            }
             if (pageIndex == 1 && page.entries().isEmpty()) {
                 issues.add("第 1 页榜单为空（接口 total=" + (expectedTotal == null ? "未知" : expectedTotal)
                         + "）；无法据此统计，请核对 resourceId 和接口访问条件");
@@ -98,6 +105,7 @@ public class LeaderboardStatisticsService {
                 expectedTotal = null;
                 eligibleUserCount = null;
                 eligibleTradingVolume = null;
+                updatedTime = null;
                 volumeField = null;
                 entriesPath = null;
                 previousPage = null;
@@ -165,7 +173,8 @@ public class LeaderboardStatisticsService {
         LeaderboardStatistics.RewardEstimate reward = complete && total.signum() > 0 && options.rewardPool() != null
                 ? estimate(options, total) : null;
         return new LeaderboardStatistics(options.resourceId(), options.startRank(), options.pageSize(), pageSize,
-                requested, Instant.now().toString(), complete ? "COMPLETE" : "INCOMPLETE", List.copyOf(issues),
+                requested, Instant.now().toString(), updatedTime == null ? null : Instant.ofEpochMilli(updatedTime).toString(),
+                complete ? "COMPLETE" : "INCOMPLETE", List.copyOf(issues),
                 selected.size(), total, average, all.isEmpty() ? null : all.get(all.size() - 1).rank(), rank1000,
                 volumeField, entriesPath, "UNVERIFIED_RULES", eligibleUserCount, eligibleTradingVolume,
                 List.copyOf(selected), volumeRanks, reward);

@@ -11,6 +11,29 @@ const formatDecimal = text => {
   return String(text).replace(/^(-?)(\d+)(\.\d+)?$/, (_, sign, whole, fraction = '') =>
     sign + whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + fraction);
 };
+const beijingTime = iso => {
+  if (!iso) return '接口未提供';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '时间格式无效';
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  }).formatToParts(date).map(part => [part.type, part.value]));
+  return parts.year + '-' + parts.month + '-' + parts.day + ' '
+    + parts.hour + ':' + parts.minute + ':' + parts.second + '（北京时间）';
+};
+function showFormError(message) {
+  const error = byId('form-error');
+  error.textContent = message;
+  show(error, true);
+  byId('status-badge').textContent = '参数错误';
+  byId('status-badge').className = 'status-badge error';
+  byId('status-message').textContent = message;
+  show(byId('result-panel'), false);
+  show(byId('status-times'), false);
+  show(byId('spinner'), false);
+  runButton.disabled = !csrfToken;
+}
 async function readJson(response) {
   if (!(response.headers.get('content-type') || '').includes('application/json')) {
     throw new Error('登录状态可能已失效，请先登录控制台再刷新页面');
@@ -22,7 +45,11 @@ function setStatus(state) {
   const badge = byId('status-badge');
   badge.textContent = ({ IDLE: '等待开始', RUNNING: '抓取中', COMPLETE: '完整', INCOMPLETE: '未完成', ERROR: '失败' })[state.status] || state.status;
   badge.className = 'status-badge ' + state.status.toLowerCase();
-  byId('status-message').textContent = value(state.message);
+  const currentId = form.elements.namedItem('resourceId').value.trim();
+  const matchesCurrentId = state.result && state.result.resourceId === currentId;
+  byId('status-message').textContent = state.result && !matchesCurrentId
+    ? '当前输入的活动 ID 与上次结果不同；请重新抓取'
+    : value(state.message);
   byId('pages-value').textContent = value(state.pagesRequested);
   byId('records-label').textContent = state.result ? '排名范围人数' : '已读取记录';
   byId('records-value').textContent = value(state.recordsRead);
@@ -38,8 +65,13 @@ function setStatus(state) {
     issueList.append(item);
   }
   show(issueList, issues.length > 0);
-  show(byId('result-panel'), !!state.result);
-  if (state.result) renderResult(state.result);
+  show(byId('result-panel'), !!matchesCurrentId);
+  show(byId('status-times'), !!matchesCurrentId);
+  if (matchesCurrentId) {
+    byId('leaderboard-updated-at').textContent = beijingTime(state.result.leaderboardUpdatedAt);
+    byId('fetched-at').textContent = beijingTime(state.result.fetchedAt);
+    renderResult(state.result);
+  }
 
   if (state.status === 'RUNNING') {
     if (!pollTimer) pollTimer = setInterval(loadStatus, 1200);
@@ -112,12 +144,30 @@ async function loadStatus() {
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
-  if (!form.reportValidity()) return;
+  if (!form.reportValidity()) {
+    showFormError('请检查必填项和参数格式');
+    return;
+  }
+  const resourceId = form.elements.namedItem('resourceId');
+  const groupIdHints = {
+    '100030535': '100030535 是活动组 ID；该活动主奖励榜请填 100030536',
+    '100030285': '100030285 是 MET 活动组 ID；主奖励榜请填 100030286'
+  };
+  if (groupIdHints[resourceId.value.trim()]) {
+    showFormError(groupIdHints[resourceId.value.trim()]);
+    resourceId.focus();
+    return;
+  }
   const data = {};
   for (const [key, raw] of new FormData(form)) {
     const text = String(raw).trim();
     if (text) data[key] = text;
   }
+  show(byId('form-error'), false);
+  show(byId('result-panel'), false);
+  show(byId('status-times'), false);
+  byId('status-badge').textContent = '提交中';
+  byId('status-badge').className = 'status-badge running';
   runButton.disabled = true;
   byId('status-message').textContent = '正在提交配置…';
   try {
@@ -128,11 +178,24 @@ form.addEventListener('submit', async event => {
     });
     const result = await readJson(response);
     if (!response.ok) throw new Error(result.error || '提交失败');
+    setStatus({ status: 'RUNNING', message: '正在抓取排行榜', pagesRequested: 0, recordsRead: 0, result: null });
     await loadStatus();
   } catch (error) {
-    byId('status-message').textContent = error.message;
-    runButton.disabled = false;
+    showFormError(error.message);
   }
+});
+
+runButton.addEventListener('click', () => {
+  if (!form.checkValidity()) showFormError('请检查必填项和参数格式');
+});
+form.addEventListener('input', () => {
+  show(byId('form-error'), false);
+  if (!byId('spinner').hidden) return;
+  show(byId('result-panel'), false);
+  show(byId('status-times'), false);
+  byId('status-badge').textContent = '待重新计算';
+  byId('status-badge').className = 'status-badge idle';
+  byId('status-message').textContent = '参数已修改，点击“开始抓取与计算”更新结果';
 });
 
 (async () => {

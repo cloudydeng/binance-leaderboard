@@ -21,7 +21,7 @@ class WebServerTest {
                 {"code":"000000","success":true,"data":{"list":[
                   {"rank":1,"userId":"masked","tradeVolume":"2"},
                   {"rank":2,"userId":"masked","tradeVolume":"1"}],
-                  "total":2,"hasMore":false}}
+                  "total":2,"hasMore":false,"updatedTime":1791853199000}}
                 """);
         try (LocalWebServer server = new LocalWebServer(0, (id, page, size) -> fixture, temp, "https://8.216.38.70")) {
             server.start();
@@ -57,6 +57,7 @@ class WebServerTest {
             JsonNode result = status.path("result");
             assertEquals(1, result.path("rankFilteredCount").asInt());
             assertEquals("1", result.path("totalVolume").asText());
+            assertEquals("2026-10-13T00:59:59Z", result.path("leaderboardUpdatedAt").asText());
             assertEquals(2, result.path("volumeRanks").get(0).path("rank").asInt());
             assertEquals("5", result.path("rewardEstimate").path("accounts").get(0).path("capped").asText());
             assertEquals(200, get(base + "api/result.json").statusCode());

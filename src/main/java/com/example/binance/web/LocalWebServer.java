@@ -182,6 +182,7 @@ public class LocalWebServer implements AutoCloseable {
             summary.put("startRank", result.startRank());
             summary.put("maxRank", result.maxRank());
             summary.put("fetchedAt", result.fetchedAt());
+            summary.put("leaderboardUpdatedAt", result.leaderboardUpdatedAt());
             summary.put("completeness", result.completeness());
             summary.put("issues", result.issues());
             summary.put("rankFilteredCount", result.rankFilteredCount());
