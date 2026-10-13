@@ -34,6 +34,8 @@ java -jar target/binance-leaderboard-stat.jar --web
 2. 在运行工具的终端安全设置 `TELEGRAM_BOT_TOKEN`，执行 `java -jar target/binance-leaderboard-stat.jar --telegram-chat-id`。命令只打印从 Telegram `getUpdates` 找到的 Chat ID，不打印 Token。若显示没有消息，先向机器人再发一条消息后重试。机器人若已有 webhook，需先关闭 webhook 才能使用 `getUpdates`。
 3. 设置 `TELEGRAM_CHAT_ID` 并重启程序。服务器 systemd 可在 root 专用的 `/etc/binance-leaderboard/telegram.env` 写入两行 `TELEGRAM_BOT_TOKEN=...` 与 `TELEGRAM_CHAT_ID=...`，权限设为 `0600` 后执行 `systemctl restart binance-leaderboard`。服务文件会读取此文件；文件不存在时通知功能保持关闭。
 
+服务器也提供交互式脚本 `bash /opt/binance-leaderboard/deploy/setup-telegram.sh`：在终端无回显地输入 Token，脚本查询 Chat ID，写入 root 专用环境文件并重启服务。不要把 Token 放在命令行参数或聊天消息中。
+
 请勿把 Token 发到聊天、命令参数或 Git；如果泄露，通过 @BotFather 重新生成。
 
 服务只监听 `127.0.0.1`，并检查页面请求来源。Cookie、CSRF Token、UUID 不在页面输入或存储，仍由启动进程从环境变量读取。奖池和个人封顶默认留空，页面不会把示例的 40,000 USDC 或 30 USDC 当作真实活动规则。关闭运行程序的终端即可停止页面服务。
