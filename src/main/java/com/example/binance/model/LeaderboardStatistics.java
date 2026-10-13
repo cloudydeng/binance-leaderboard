@@ -9,7 +9,9 @@ public record LeaderboardStatistics(String resourceId, int startRank, int reques
                                     Long maxRank, BigDecimal rank1000Volume, String volumeField,
                                     String entriesPath, String qualificationStatus,
                                     Long serverEligibleUserCount, BigDecimal serverEligibleTradingVolume,
-                                    List<LeaderboardEntry> entries, RewardEstimate rewardEstimate) {
+                                    List<LeaderboardEntry> entries, List<VolumeRank> volumeRanks,
+                                    RewardEstimate rewardEstimate) {
+    public record VolumeRank(BigDecimal volume, long rank) {}
     public record RewardEstimate(BigDecimal rewardPool, String rewardUnit, BigDecimal maxReward,
                                  BigDecimal rewardPer1000, BigDecimal rewardPer10000,
                                  BigDecimal capVolume, List<AccountReward> accounts) {}

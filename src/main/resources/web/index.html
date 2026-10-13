@@ -26,9 +26,10 @@
         </div>
         <form id="run-form">
           <div class="field-grid two">
-            <label class="field"><span>活动 resourceId *</span><input name="resourceId" inputmode="numeric" pattern="[1-9][0-9]*" value="100030536" required><small>本期主奖励榜：100030536；100030535 是活动组 ID</small></label>
+            <label class="field"><span>活动 resourceId *</span><input name="resourceId" inputmode="numeric" pattern="[1-9][0-9]*" value="100030286" required><small>MET 主奖励榜：100030286；100030285 是活动组 ID</small></label>
             <label class="field"><span>起始排名</span><input name="startRank" type="number" min="1" step="1" value="1001"><small>统计该名次及之后的用户</small></label>
           </div>
+          <label class="field full"><span>我的账户交易量</span><textarea name="volumes" rows="3" placeholder="12,572.05046 20,180.18002 12,774.94774"></textarea><small>多个账户用空格分隔；数字内部可带千分位逗号和小数。抓取完整榜单后显示按交易量推算的名次，无需填写奖池。</small></label>
 
           <div class="divider"></div>
           <div class="subhead"><h3>理论奖励估算</h3><span>可选</span></div>
@@ -38,8 +39,6 @@
             <label class="field"><span>奖励币种</span><input name="rewardUnit" placeholder="USDC" maxlength="16"><small>仅用于结果标注</small></label>
             <label class="field"><span>个人奖励封顶</span><input name="maxReward" inputmode="decimal" placeholder="例如 30"><small>不确定时留空</small></label>
           </div>
-          <label class="field full"><span>我的账户交易量</span><input name="volumes" placeholder="10000,20000"><small>多个账户用英文逗号分隔；填写奖池后可显示每个账户的预估奖励</small></label>
-
           <details class="advanced">
             <summary>高级设置 <span>分页、字段映射、导出目录</span></summary>
             <div class="advanced-body">
@@ -83,6 +82,11 @@
             <div><span>人均交易量</span><strong id="result-average"></strong></div>
             <div><span>第 1000 名交易量</span><strong id="result-rank1000"></strong></div>
             <div><span>接口合格总人数</span><strong id="result-server-count"></strong></div>
+          </div>
+          <div id="volume-ranks-box" class="volume-ranks-box" hidden>
+            <h3>我的交易量排名</h3>
+            <p>按当前完整榜单的交易量推算；相同交易量视为并列。实际名次仍以币安榜单及活动资格为准。</p>
+            <div id="volume-ranks-list"></div>
           </div>
           <div id="reward-box" class="reward-box" hidden>
             <h3>理论奖励估算 <span id="reward-unit"></span></h3>

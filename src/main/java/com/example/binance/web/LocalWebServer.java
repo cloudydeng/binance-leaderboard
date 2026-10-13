@@ -191,6 +191,8 @@ public class LocalWebServer implements AutoCloseable {
             summary.put("qualificationStatus", result.qualificationStatus());
             summary.put("serverEligibleUserCount", result.serverEligibleUserCount());
             summary.put("serverEligibleTradingVolume", decimal(result.serverEligibleTradingVolume()));
+            summary.put("volumeRanks", result.volumeRanks().stream().map(item -> Map.of(
+                    "volume", decimal(item.volume()), "rank", item.rank())).toList());
             var reward = result.rewardEstimate();
             if (reward != null) {
                 Map<String, Object> estimate = new LinkedHashMap<>();

@@ -80,6 +80,11 @@ public class BinanceLeaderboardApp {
         System.out.println("请求页数: " + r.pagesRequested() + "；排名范围人数: " + r.rankFilteredCount());
         System.out.println("交易量合计: " + plain(r.totalVolume()) + "；人均: " + plain(r.averageVolume()));
         if (r.rank1000Volume() != null) System.out.println("第 1000 名交易量: " + plain(r.rank1000Volume()));
+        for (int i = 0; i < r.volumeRanks().size(); i++) {
+            var item = r.volumeRanks().get(i);
+            System.out.println("账户 " + (i + 1) + "：交易量 " + plain(item.volume())
+                    + "，按当前榜单交易量推算第 " + item.rank() + " 名");
+        }
         System.out.println("资格规则: 未核实；请核对活动币种、交易量单位、奖池归属与计奖资格。");
         if (r.rewardEstimate() != null) {
             var reward = r.rewardEstimate();

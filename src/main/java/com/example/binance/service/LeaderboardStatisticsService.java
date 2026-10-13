@@ -158,14 +158,29 @@ public class LeaderboardStatisticsService {
         BigDecimal total = selected.stream().map(LeaderboardEntry::volume).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal average = selected.isEmpty() ? BigDecimal.ZERO : total.divide(BigDecimal.valueOf(selected.size()), MathContext.DECIMAL128);
         BigDecimal rank1000 = all.stream().filter(e -> e.rank() == 1000L).findFirst().map(LeaderboardEntry::volume).orElse(null);
+        List<LeaderboardStatistics.VolumeRank> volumeRanks = complete
+                ? options.volumes().stream().map(volume ->
+                        new LeaderboardStatistics.VolumeRank(volume, rankForVolume(all, volume))).toList()
+                : List.of();
         LeaderboardStatistics.RewardEstimate reward = complete && total.signum() > 0 && options.rewardPool() != null
                 ? estimate(options, total) : null;
         return new LeaderboardStatistics(options.resourceId(), options.startRank(), options.pageSize(), pageSize,
                 requested, Instant.now().toString(), complete ? "COMPLETE" : "INCOMPLETE", List.copyOf(issues),
                 selected.size(), total, average, all.isEmpty() ? null : all.get(all.size() - 1).rank(), rank1000,
                 volumeField, entriesPath, "UNVERIFIED_RULES", eligibleUserCount, eligibleTradingVolume,
-                List.copyOf(selected), reward);
+                List.copyOf(selected), volumeRanks, reward);
     }
+
+    private static long rankForVolume(List<LeaderboardEntry> entries, BigDecimal volume) {
+        int left = 0, right = entries.size();
+        while (left < right) {
+            int middle = (left + right) >>> 1;
+            if (entries.get(middle).volume().compareTo(volume) > 0) left = middle + 1;
+            else right = middle;
+        }
+        return left + 1L;
+    }
+
     public static LeaderboardStatistics.RewardEstimate estimate(Options options, BigDecimal total) {
         if (total.signum() <= 0 || options.rewardPool() == null) throw new IllegalArgumentException("总交易量和奖池必须大于 0");
         BigDecimal pool = options.rewardPool();

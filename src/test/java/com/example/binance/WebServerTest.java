@@ -32,6 +32,7 @@ class WebServerTest {
             assertTrue(html.body().contains("href=\"style.css\""));
             assertTrue(html.body().contains("src=\"app.js\""));
             assertTrue(html.body().contains("href=\"api/result.csv\""));
+            assertTrue(html.body().contains("<textarea name=\"volumes\""));
             assertFalse(html.body().contains("value=\"40000\""));
 
             String token = mapper.readTree(get(base + "api/config").body()).path("csrfToken").asText();
@@ -56,6 +57,7 @@ class WebServerTest {
             JsonNode result = status.path("result");
             assertEquals(1, result.path("rankFilteredCount").asInt());
             assertEquals("1", result.path("totalVolume").asText());
+            assertEquals(2, result.path("volumeRanks").get(0).path("rank").asInt());
             assertEquals("5", result.path("rewardEstimate").path("accounts").get(0).path("capped").asText());
             assertEquals(200, get(base + "api/result.json").statusCode());
             assertTrue(get(base + "api/result.csv").body().contains("rank,userId,volume"));

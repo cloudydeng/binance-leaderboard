@@ -25,6 +25,8 @@ public record Options(String resourceId, int startRank, int pageSize, int maxPag
         if (resourceId == null || !resourceId.matches("[1-9][0-9]*")) throw new IllegalArgumentException("--resourceId 必填且必须是正整数");
         if (resourceId.equals("100030535"))
             throw new IllegalArgumentException("100030535 是活动组 ID；本期主奖励榜请使用 100030536");
+        if (resourceId.equals("100030285"))
+            throw new IllegalArgumentException("100030285 是 MET 活动组 ID；主奖励榜请使用 100030286");
         try { Long.parseLong(resourceId); }
         catch (NumberFormatException e) { throw new IllegalArgumentException("resourceId 超出整数范围"); }
         int startRank = positiveInt(values, "startRank", 1001);
@@ -39,12 +41,17 @@ public record Options(String resourceId, int startRank, int pageSize, int maxPag
         if (maxReward != null && rewardPool == null) throw new IllegalArgumentException("maxReward 需要 rewardPool");
         List<BigDecimal> volumes = new ArrayList<>();
         if (values.containsKey("volumes")) {
-            for (String part : values.get("volumes").split(",", -1)) {
-                BigDecimal volume = decimal(part, "volumes");
-                if (volume == null || volume.signum() < 0) throw new IllegalArgumentException("volumes 中每个值必须非负");
-                volumes.add(volume);
+            for (String token : values.get("volumes").trim().split("[\\s;]+", -1)) {
+                if (token.isBlank()) continue;
+                // 空格分隔账户；数字内部的逗号是千分位。旧版逗号分隔的输入仍可使用。
+                String[] parts = token.matches("[0-9]{1,3}(,[0-9]{3})+(\\.[0-9]+)?")
+                        ? new String[]{token.replace(",", "")} : token.split(",", -1);
+                for (String part : parts) {
+                    BigDecimal volume = decimal(part, "volumes");
+                    if (volume == null || volume.signum() < 0) throw new IllegalArgumentException("volumes 中每个值必须非负");
+                    volumes.add(volume);
+                }
             }
-            if (rewardPool == null) throw new IllegalArgumentException("volumes 需要 rewardPool");
         }
         String unit = values.getOrDefault("rewardUnit", "");
         if (!unit.isEmpty() && !unit.matches("[A-Za-z0-9]{2,16}")) throw new IllegalArgumentException("rewardUnit 格式无效");
@@ -82,7 +89,8 @@ public record Options(String resourceId, int startRank, int pageSize, int maxPag
     public static String help() {
         return "用法: java -jar target/binance-leaderboard-stat.jar --resourceId=活动ID [选项]\n"
                 + "--startRank=1001 --pageSize=100 --maxPages=1000 --delayMs=450\n"
-                + "--rewardPool=40000 --rewardUnit=USDC --maxReward=30 --volumes=1000,2000（奖励参数仅作示例）\n"
+                + "--volumes='12,572.05046 20,180.18002'（空格分隔，允许千分位）\n"
+                + "--rewardPool=40000 --rewardUnit=USDC --maxReward=30（奖励参数仅作示例）\n"
                 + "--entriesPath=data.resourceSummaryList.data --rankField=sequence --volumeField=tradingVolume [--userIdField=userId]\n"
                 + "--outputDir=.  结构无法自动确认时必须显式指定字段映射。\n"
                 + "身份信息仅从 BINANCE_COOKIE / BINANCE_CSRF_TOKEN / BINANCE_UUID 环境变量读取。";

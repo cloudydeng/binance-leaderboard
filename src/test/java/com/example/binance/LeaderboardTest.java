@@ -152,6 +152,33 @@ class LeaderboardTest {
         assertThrows(IllegalArgumentException.class, () -> options("--volumes=1,broken", "--rewardPool=2"));
         assertTrue(assertThrows(IllegalArgumentException.class,
                 () -> Options.parse(new String[]{"--resourceId=100030535"})).getMessage().contains("100030536"));
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> Options.parse(new String[]{"--resourceId=100030285"})).getMessage().contains("100030286"));
+    }
+
+    @Test void spaceSeparatedGroupedVolumesHaveRanksWithoutRewardPool() throws Exception {
+        var parsed = options("--volumes=12,572.05046 20,180.18002 12,774.94774 11,857.9984 12,350.67422");
+        assertEquals(List.of(
+                new BigDecimal("12572.05046"), new BigDecimal("20180.18002"),
+                new BigDecimal("12774.94774"), new BigDecimal("11857.9984"),
+                new BigDecimal("12350.67422")), parsed.volumes());
+        assertEquals(List.of(new BigDecimal("10000"), new BigDecimal("20000")),
+                options("--volumes=10000,20000").volumes());
+
+        JsonNode page = json("""
+                {"data":{"list":[
+                  {"rank":1,"tradeVolume":20},
+                  {"rank":2,"tradeVolume":12},
+                  {"rank":2,"tradeVolume":12},
+                  {"rank":4,"tradeVolume":10}],"total":4,"hasMore":false}}
+                """);
+        var result = new LeaderboardStatisticsService((id, index, size) -> page).collect(
+                Options.parse(new String[]{"--resourceId=12", "--pageSize=4", "--delayMs=0",
+                        "--startRank=2", "--volumes=25 12 11 9"}));
+        assertEquals("COMPLETE", result.completeness());
+        assertNull(result.rewardEstimate());
+        assertEquals(List.of(1L, 2L, 4L, 5L),
+                result.volumeRanks().stream().map(LeaderboardStatistics.VolumeRank::rank).toList());
     }
 
     @Test void httpClientHandlesAuthAndRetriesServerErrorWithoutLeakingCookie() throws Exception {

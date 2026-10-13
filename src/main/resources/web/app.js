@@ -6,6 +6,11 @@ let pollTimer = null;
 const byId = id => document.getElementById(id);
 const show = (element, visible) => { element.hidden = !visible; };
 const value = text => text == null || text === '' ? '—' : String(text);
+const formatDecimal = text => {
+  if (text == null || text === '') return '—';
+  return String(text).replace(/^(-?)(\d+)(\.\d+)?$/, (_, sign, whole, fraction = '') =>
+    sign + whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + fraction);
+};
 async function readJson(response) {
   if (!(response.headers.get('content-type') || '').includes('application/json')) {
     throw new Error('登录状态可能已失效，请先登录控制台再刷新页面');
@@ -51,11 +56,26 @@ function renderResult(result) {
   resultState.className = 'status-badge ' + result.completeness.toLowerCase();
   byId('result-resource').textContent = value(result.resourceId);
   byId('result-range').textContent = result.startRank + ' – ' + value(result.maxRank);
-  byId('result-total').textContent = value(result.totalVolume);
-  byId('result-count').textContent = value(result.rankFilteredCount);
-  byId('result-average').textContent = value(result.averageVolume);
-  byId('result-rank1000').textContent = value(result.rank1000Volume);
-  byId('result-server-count').textContent = value(result.serverEligibleUserCount);
+  byId('result-total').textContent = formatDecimal(result.totalVolume);
+  byId('result-count').textContent = formatDecimal(result.rankFilteredCount);
+  byId('result-average').textContent = formatDecimal(result.averageVolume);
+  byId('result-rank1000').textContent = formatDecimal(result.rank1000Volume);
+  byId('result-server-count').textContent = formatDecimal(result.serverEligibleUserCount);
+
+  const rankList = byId('volume-ranks-list');
+  rankList.replaceChildren();
+  const ranks = result.volumeRanks || [];
+  for (let i = 0; i < ranks.length; i++) {
+    const row = document.createElement('div');
+    row.className = 'account-row';
+    const label = document.createElement('span');
+    label.textContent = '账户 ' + (i + 1) + ' · 交易量 ' + formatDecimal(ranks[i].volume);
+    const rank = document.createElement('strong');
+    rank.textContent = '约第 ' + formatDecimal(ranks[i].rank) + ' 名';
+    row.append(label, rank);
+    rankList.append(row);
+  }
+  show(byId('volume-ranks-box'), ranks.length > 0);
 
   const reward = result.rewardEstimate;
   show(byId('reward-box'), !!reward);
@@ -63,7 +83,7 @@ function renderResult(result) {
   byId('reward-unit').textContent = reward.rewardUnit || '未指定币种';
   byId('reward-1000').textContent = value(reward.rewardPer1000);
   byId('reward-10000').textContent = value(reward.rewardPer10000);
-  byId('reward-cap-volume').textContent = value(reward.capVolume);
+  byId('reward-cap-volume').textContent = formatDecimal(reward.capVolume);
   const list = byId('account-list');
   list.replaceChildren();
   for (let i = 0; i < reward.accounts.length; i++) {
@@ -71,7 +91,7 @@ function renderResult(result) {
     row.className = 'account-row';
     const account = reward.accounts[i];
     const label = document.createElement('span');
-    label.textContent = '账户 ' + (i + 1) + ' · 交易量 ' + account.volume;
+    label.textContent = '账户 ' + (i + 1) + ' · 交易量 ' + formatDecimal(account.volume);
     const amount = document.createElement('strong');
     amount.textContent = account.capped + (reward.rewardUnit ? ' ' + reward.rewardUnit : '');
     row.append(label, amount);

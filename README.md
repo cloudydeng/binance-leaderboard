@@ -18,7 +18,7 @@ java -jar target/binance-leaderboard-stat.jar --help
 java -jar target/binance-leaderboard-stat.jar --web
 ```
 
-然后在本机打开 `http://127.0.0.1:8787/`。端口占用时可用 `--web --webPort=8788`。页面可配置活动 ID、起始排名、奖池、奖励币种、个人封顶、多个账户交易量；高级设置包含每页条数、最大页数、请求间隔、接口字段映射和导出目录。抓取进度与结果在页面展示，可直接下载 JSON、CSV。一次只运行一个抓取任务。
+然后在本机打开 `http://127.0.0.1:8787/`。端口占用时可用 `--web --webPort=8788`。页面可配置活动 ID、起始排名、奖池、奖励币种、个人封顶、多个账户交易量；高级设置包含每页条数、最大页数、请求间隔、接口字段映射和导出目录。多个账户交易量以空格分隔，例如 `12,572.05046 20,180.18002`，数字可带千分位逗号。完整抓取后会按榜单交易量推算每个输入值的名次，无需奖池；填写奖池后另显示理论奖励。抓取进度与结果在页面展示，可直接下载 JSON、CSV。一次只运行一个抓取任务。
 
 服务只监听 `127.0.0.1`，并检查页面请求来源。Cookie、CSRF Token、UUID 不在页面输入或存储，仍由启动进程从环境变量读取。奖池和个人封顶默认留空，页面不会把示例的 40,000 USDC 或 30 USDC 当作真实活动规则。关闭运行程序的终端即可停止页面服务。
 
@@ -34,7 +34,7 @@ java -jar target/binance-leaderboard-stat.jar \
   --rewardPool=40000 --rewardUnit=USDC --maxReward=30
 ```
 
-`--resourceId` 必填；`--startRank` 默认 1001，`--pageSize` 默认 100，`--maxPages` 默认 1000，`--delayMs` 默认 450。多个账户的交易量用 `--volumes=14048.0258,18545.05623`。默认在当前目录写 `result-<resourceId>.json` 与 `.csv`，可用 `--outputDir` 改目录。`INCOMPLETE` 的 CSV 首行有醒目标记，JSON 有完整性状态及原因；命令退出码为 2。
+`--resourceId` 必填；`--startRank` 默认 1001，`--pageSize` 默认 100，`--maxPages` 默认 1000，`--delayMs` 默认 450。多个账户的交易量用 `--volumes='12,572.05046 20,180.18002'`，旧版英文逗号列表仍兼容。默认在当前目录写 `result-<resourceId>.json` 与 `.csv`，可用 `--outputDir` 改目录。`INCOMPLETE` 的 CSV 首行有醒目标记，JSON 有完整性状态及原因；命令退出码为 2。
 
 如果返回结构不能唯一识别，需要根据**实际响应**指定映射：
 
