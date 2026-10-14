@@ -9,6 +9,7 @@ DynamicUser=yes
 StateDirectory=binance-leaderboard-hourly
 WorkingDirectory=/var/lib/binance-leaderboard-hourly
 EnvironmentFile=/etc/binance-leaderboard/telegram.env
+EnvironmentFile=-/etc/binance-leaderboard/square.env
 ExecStart=/usr/bin/java -Xms32m -Xmx256m -jar /opt/binance-leaderboard/target/binance-leaderboard-stat.jar --scheduled-report
 TimeoutStartSec=10min
 NoNewPrivileges=yes

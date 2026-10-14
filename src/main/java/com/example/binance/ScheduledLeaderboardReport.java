@@ -7,10 +7,15 @@ import com.example.binance.service.CachedLeaderboardService;
 import com.example.binance.service.LeaderboardSnapshotCache;
 import com.example.binance.service.LeaderboardStatisticsService;
 import com.example.binance.telegram.TelegramNotifier;
+import com.example.binance.square.BinanceSquarePublisher;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -19,12 +24,14 @@ import java.util.List;
 
 /** One fresh, combined Telegram report for the two current main reward leaderboards. */
 final class ScheduledLeaderboardReport {
-    record Campaign(String name, String resourceId) {}
+    record Campaign(String name, String resourceId, String pairs, Instant endsAt) {}
     record Section(Campaign campaign, LeaderboardStatistics result, String error) {}
 
     private static final List<Campaign> CAMPAIGNS = List.of(
-            new Campaign("现货锦标赛第四期（ZEC/USUAL）", "100030536"),
-            new Campaign("MET", "100030286"));
+            new Campaign("现货交易量锦标赛第四期", "100030536", "ZEC/USDC、USUAL/USDT",
+                    Instant.parse("2026-10-16T10:00:00Z")),
+            new Campaign("MET 交易锦标赛", "100030286", "MET/USDC",
+                    Instant.parse("2026-10-15T10:00:00Z")));
     private static final DateTimeFormatter BEIJING = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.of("Asia/Shanghai"));
 
@@ -37,7 +44,8 @@ final class ScheduledLeaderboardReport {
                 System.err.println("定时报告未配置 Telegram Bot Token 和 Chat ID");
                 return 2;
             }
-            return run(new BinanceLeaderboardClient()::fetchPage, notifier, Path.of("."), 450);
+            return run(new BinanceLeaderboardClient()::fetchPage, notifier,
+                    BinanceSquarePublisher.fromEnvironment(), Path.of("."), 450);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             System.err.println("定时报告被中断");
@@ -49,6 +57,18 @@ final class ScheduledLeaderboardReport {
 
     static int run(LeaderboardStatisticsService.PageSource source, TelegramNotifier notifier,
                    Path workDir, int delayMs) throws IOException, InterruptedException {
+        return run(source, notifier, null, workDir, delayMs);
+    }
+
+    static int run(LeaderboardStatisticsService.PageSource source, TelegramNotifier notifier,
+                   BinanceSquarePublisher square, Path workDir, int delayMs)
+            throws IOException, InterruptedException {
+        return run(source, notifier, square, workDir, delayMs, Clock.systemUTC());
+    }
+
+    static int run(LeaderboardStatisticsService.PageSource source, TelegramNotifier notifier,
+                   BinanceSquarePublisher square, Path workDir, int delayMs, Clock clock)
+            throws IOException, InterruptedException {
         var sections = new ArrayList<Section>();
         var cache = new LeaderboardSnapshotCache(workDir.resolve("cache"));
         boolean failed = false;
@@ -68,8 +88,30 @@ final class ScheduledLeaderboardReport {
                 failed = true;
             }
         }
-        notifier.sendText(format(Instant.now(), sections));
+        Instant checkedAt = clock.instant();
+        String report = format(checkedAt, sections);
+        notifier.sendText(report);
         System.out.println("已发送两项活动的合并报告；完整性：" + (failed ? "部分失败" : "完整"));
+        if (square != null && !failed && CAMPAIGNS.stream().anyMatch(c -> checkedAt.isBefore(c.endsAt()))) {
+            Path marker = workDir.resolve("square-posts")
+                    .resolve(DateTimeFormatter.ofPattern("yyyyMMddHH").withZone(ZoneId.of("Asia/Shanghai"))
+                            .format(checkedAt) + ".txt");
+            if (Files.exists(marker)) {
+                System.out.println("本小时币安广场报告已发布，跳过重复发帖");
+            } else {
+                try {
+                    var published = square.publish(report);
+                    Files.createDirectories(marker.getParent());
+                    Files.writeString(marker, published.link() == null ? "已提交\n" : published.link() + "\n",
+                            StandardOpenOption.CREATE_NEW);
+                    System.out.println("已发布币安广场报告：" +
+                            (published.link() == null ? "已提交，未返回链接" : published.link()));
+                } catch (IOException e) {
+                    System.err.println("币安广场发布失败：" + e.getMessage());
+                    return 2;
+                }
+            }
+        }
         return failed ? 2 : 0;
     }
 
@@ -79,7 +121,12 @@ final class ScheduledLeaderboardReport {
                 .append("规则：第 1001 名及以后瓜分 80 BNB；单人封顶 0.05 BNB\n");
         for (Section section : sections) {
             out.append("\n").append(section.campaign().name()).append(" · ")
-                    .append(section.campaign().resourceId()).append("\n");
+                    .append(section.campaign().resourceId()).append("\n")
+                    .append("交易对：").append(section.campaign().pairs()).append("\n")
+                    .append("活动结束：").append(BEIJING.format(section.campaign().endsAt()))
+                    .append("（北京时间）\n")
+                    .append("距离结束：").append(remaining(checkedAt, section.campaign().endsAt()))
+                    .append("\n");
             LeaderboardStatistics result = section.result();
             if (result == null) {
                 out.append(section.error() == null ? "计算失败" : section.error()).append("\n");
@@ -113,6 +160,17 @@ final class ScheduledLeaderboardReport {
         if (iso == null) return "接口未提供";
         try { return BEIJING.format(Instant.parse(iso)) + "（北京时间）"; }
         catch (RuntimeException e) { return "时间格式无效"; }
+    }
+
+    private static String remaining(Instant now, Instant endsAt) {
+        if (!now.isBefore(endsAt)) return "已结束";
+        long seconds = Duration.between(now, endsAt).getSeconds();
+        if (seconds < 60) return "不足 1 分钟";
+        long minutes = seconds / 60;
+        long days = minutes / (24 * 60);
+        long hours = minutes / 60 % 24;
+        long restMinutes = minutes % 60;
+        return (days > 0 ? days + " 天 " : "") + hours + " 小时 " + restMinutes + " 分钟";
     }
 
     private static String shortReason(String value) {
