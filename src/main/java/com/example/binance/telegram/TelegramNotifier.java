@@ -11,12 +11,16 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /** Optional Telegram Bot API delivery; credentials come only from process environment. */
 public class TelegramNotifier {
+    public record TextLink(String label, String url) {}
     private static final DateTimeFormatter BEIJING = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.of("Asia/Shanghai"));
     private final HttpClient http;
@@ -70,10 +74,27 @@ public class TelegramNotifier {
     }
 
     public void sendText(String text) throws IOException, InterruptedException {
+        validateText(text);
+        request("sendMessage", Map.of("chat_id", chatId, "text", text));
+    }
+
+    public void sendTextWithLinks(String text, List<TextLink> links) throws IOException, InterruptedException {
+        validateText(text);
+        var entities = new ArrayList<Map<String, Object>>();
+        for (TextLink link : links) {
+            int offset = text.indexOf(link.label()); // Java indexes UTF-16 code units, as Telegram requires.
+            if (offset < 0) throw new IllegalArgumentException("交易对文字未出现在 Telegram 报告中");
+            entities.add(Map.of("type", "text_link", "offset", offset,
+                    "length", link.label().length(), "url", link.url()));
+        }
+        entities.sort(Comparator.comparingInt(entity -> (int) entity.get("offset")));
+        request("sendMessage", Map.of("chat_id", chatId, "text", text, "entities", entities));
+    }
+
+    private void validateText(String text) {
         if (chatId == null) throw new IllegalStateException("TELEGRAM_CHAT_ID 未配置");
         if (text == null || text.isBlank() || text.length() > 4096)
             throw new IllegalArgumentException("Telegram 消息长度无效");
-        request("sendMessage", Map.of("chat_id", chatId, "text", text));
     }
 
     private JsonNode request(String method, Object body) throws IOException, InterruptedException {

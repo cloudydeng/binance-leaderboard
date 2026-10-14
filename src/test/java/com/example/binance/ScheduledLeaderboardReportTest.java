@@ -54,7 +54,8 @@ class ScheduledLeaderboardReportTest {
 
             assertEquals(0, ScheduledLeaderboardReport.run(source, notifier, publisher, temp, 0, clock));
             assertEquals(22, calls.get());
-            String first = mapper.readTree(telegram.takeRequest().getBody().readUtf8()).path("text").asText();
+            JsonNode telegramBody = mapper.readTree(telegram.takeRequest().getBody().readUtf8());
+            String first = telegramBody.path("text").asText();
             assertTrue(first.contains("100030536"));
             assertTrue(first.contains("100030286"));
             assertTrue(first.contains("交易量合计：999 USD"));
@@ -66,11 +67,23 @@ class ScheduledLeaderboardReportTest {
             assertTrue(first.contains("活动结束：2026-10-15 18:00:00（北京时间）"));
             assertTrue(first.contains("距离结束："));
             assertFalse(first.contains("TestToken"));
+            JsonNode entities = telegramBody.path("entities");
+            assertEquals(3, entities.size());
+            assertEquals("https://www.binance.com/zh-CN/trade/ZEC_USDC", entities.get(0).path("url").asText());
+            assertEquals(first.indexOf("ZEC/USDC"), entities.get(0).path("offset").asInt());
+            assertEquals("https://www.binance.com/zh-CN/trade/USUAL_USDT", entities.get(1).path("url").asText());
+            assertEquals("https://www.binance.com/zh-CN/trade/MET_USDC", entities.get(2).path("url").asText());
             var squareRequest = square.takeRequest();
             assertEquals("test-posting-key", squareRequest.getHeader("X-Square-OpenAPI-Key"));
             JsonNode body = mapper.readTree(squareRequest.getBody().readUtf8());
             assertEquals(1, body.path("contentType").asInt());
-            assertEquals(first, body.path("bodyTextOnly").asText());
+            assertTrue(body.path("bodyTextOnly").asText().startsWith(first));
+            assertTrue(body.path("bodyTextOnly").asText().contains(
+                    "ZEC/USDC https://www.binance.com/zh-CN/trade/ZEC_USDC"));
+            assertTrue(body.path("bodyTextOnly").asText().contains(
+                    "USUAL/USDT https://www.binance.com/zh-CN/trade/USUAL_USDT"));
+            assertTrue(body.path("bodyTextOnly").asText().contains(
+                    "MET/USDC https://www.binance.com/zh-CN/trade/MET_USDC"));
             assertFalse(body.toString().contains("test-posting-key"));
 
             assertEquals(0, ScheduledLeaderboardReport.run(source, notifier, publisher, temp, 0, clock));
@@ -81,7 +94,8 @@ class ScheduledLeaderboardReportTest {
     }
 
     @Test void countdownStopsAtOfficialDeadline() {
-        var campaign = new ScheduledLeaderboardReport.Campaign("MET", "100030286", "MET/USDC",
+        var campaign = new ScheduledLeaderboardReport.Campaign("MET", "100030286",
+                List.of(new ScheduledLeaderboardReport.TradingPair("MET/USDC", "MET_USDC")),
                 Instant.parse("2026-10-15T10:00:00Z"));
         var sections = List.of(new ScheduledLeaderboardReport.Section(campaign, null, "未抓取"));
         assertTrue(ScheduledLeaderboardReport.format(Instant.parse("2026-10-14T09:00:00Z"), sections)

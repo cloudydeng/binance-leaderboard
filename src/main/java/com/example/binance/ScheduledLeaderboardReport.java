@@ -21,16 +21,23 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /** One fresh, combined Telegram report for the two current main reward leaderboards. */
 final class ScheduledLeaderboardReport {
-    record Campaign(String name, String resourceId, String pairs, Instant endsAt) {}
+    record TradingPair(String label, String symbol) {
+        String url() { return "https://www.binance.com/zh-CN/trade/" + symbol; }
+    }
+    record Campaign(String name, String resourceId, List<TradingPair> pairs, Instant endsAt) {}
     record Section(Campaign campaign, LeaderboardStatistics result, String error) {}
 
     private static final List<Campaign> CAMPAIGNS = List.of(
-            new Campaign("现货交易量锦标赛第四期", "100030536", "ZEC/USDC、USUAL/USDT",
+            new Campaign("现货交易量锦标赛第四期", "100030536",
+                    List.of(new TradingPair("ZEC/USDC", "ZEC_USDC"),
+                            new TradingPair("USUAL/USDT", "USUAL_USDT")),
                     Instant.parse("2026-10-16T10:00:00Z")),
-            new Campaign("MET 交易锦标赛", "100030286", "MET/USDC",
+            new Campaign("MET 交易锦标赛", "100030286",
+                    List.of(new TradingPair("MET/USDC", "MET_USDC")),
                     Instant.parse("2026-10-15T10:00:00Z")));
     private static final DateTimeFormatter BEIJING = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.of("Asia/Shanghai"));
@@ -90,7 +97,10 @@ final class ScheduledLeaderboardReport {
         }
         Instant checkedAt = clock.instant();
         String report = format(checkedAt, sections);
-        notifier.sendText(report);
+        notifier.sendTextWithLinks(report, CAMPAIGNS.stream()
+                .flatMap(c -> c.pairs().stream())
+                .map(p -> new TelegramNotifier.TextLink(p.label(), p.url()))
+                .toList());
         System.out.println("已发送两项活动的合并报告；完整性：" + (failed ? "部分失败" : "完整"));
         if (square != null && !failed && CAMPAIGNS.stream().anyMatch(c -> checkedAt.isBefore(c.endsAt()))) {
             Path marker = workDir.resolve("square-posts")
@@ -100,7 +110,7 @@ final class ScheduledLeaderboardReport {
                 System.out.println("本小时币安广场报告已发布，跳过重复发帖");
             } else {
                 try {
-                    var published = square.publish(report);
+                    var published = square.publish(formatSquare(report));
                     Files.createDirectories(marker.getParent());
                     Files.writeString(marker, published.link() == null ? "已提交\n" : published.link() + "\n",
                             StandardOpenOption.CREATE_NEW);
@@ -122,7 +132,8 @@ final class ScheduledLeaderboardReport {
         for (Section section : sections) {
             out.append("\n").append(section.campaign().name()).append(" · ")
                     .append(section.campaign().resourceId()).append("\n")
-                    .append("交易对：").append(section.campaign().pairs()).append("\n")
+                    .append("交易对：").append(section.campaign().pairs().stream()
+                            .map(TradingPair::label).collect(Collectors.joining("、"))).append("\n")
                     .append("活动结束：").append(BEIJING.format(section.campaign().endsAt()))
                     .append("（北京时间）\n")
                     .append("距离结束：").append(remaining(checkedAt, section.campaign().endsAt()))
@@ -153,6 +164,16 @@ final class ScheduledLeaderboardReport {
                     .append(rounded(reward.capVolume(), 2)).append(" USD 交易量\n");
         }
         out.append("\n仅按榜单交易量估算；实际资格与奖励以币安结算为准。");
+        return out.toString();
+    }
+
+    static String formatSquare(String report) {
+        StringBuilder out = new StringBuilder(report).append("\n\n现货交易页面：\n");
+        for (Campaign campaign : CAMPAIGNS) {
+            for (TradingPair pair : campaign.pairs()) {
+                out.append(pair.label()).append(" ").append(pair.url()).append("\n");
+            }
+        }
         return out.toString();
     }
 
