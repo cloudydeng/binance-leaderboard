@@ -66,8 +66,14 @@ public class TelegramNotifier {
     }
 
     public void send(LeaderboardStatistics result) throws IOException, InterruptedException {
+        sendText(message(result));
+    }
+
+    public void sendText(String text) throws IOException, InterruptedException {
         if (chatId == null) throw new IllegalStateException("TELEGRAM_CHAT_ID 未配置");
-        request("sendMessage", Map.of("chat_id", chatId, "text", message(result)));
+        if (text == null || text.isBlank() || text.length() > 4096)
+            throw new IllegalArgumentException("Telegram 消息长度无效");
+        request("sendMessage", Map.of("chat_id", chatId, "text", text));
     }
 
     private JsonNode request(String method, Object body) throws IOException, InterruptedException {

@@ -1,0 +1,21 @@
+[Unit]
+Description=Binance two-campaign hourly Telegram report
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+StateDirectory=binance-leaderboard-hourly
+WorkingDirectory=/var/lib/binance-leaderboard-hourly
+EnvironmentFile=/etc/binance-leaderboard/telegram.env
+ExecStart=/usr/bin/java -Xms32m -Xmx256m -jar /opt/binance-leaderboard/target/binance-leaderboard-stat.jar --scheduled-report
+TimeoutStartSec=10min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/binance-leaderboard-hourly
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+MemoryMax=512M

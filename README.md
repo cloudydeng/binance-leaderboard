@@ -38,6 +38,12 @@ java -jar target/binance-leaderboard-stat.jar --web
 
 请勿把 Token 发到聊天、命令参数或 Git；如果泄露，通过 @BotFather 重新生成。
 
+### 每小时双活动报告
+
+`java -jar target/binance-leaderboard-stat.jar --scheduled-report` 会重新抓取主榜 `100030536`（现货锦标赛第四期，ZEC/USUAL）和 `100030286`（MET），按第 1001 名及以后各自的完整交易量计算 **80 BNB** 比例奖池与 **0.05 BNB** 个人封顶，并把两项结果合并为一条 Telegram 消息。消息列出榜单更新时间、范围人数、交易量合计、每 1,000 USD 交易量对应的理论 BNB 与达到个人封顶所需交易量。若某项抓取不完整，会明确标记且不输出该项奖励估算。定时模式每次强制请求币安，完整快照另存于自己的 `cache/`；不使用页面的旧缓存，也不读取页面中输入的个人交易量。
+
+服务器使用 `deploy/binance-leaderboard-hourly.service` 和 `.timer`，按北京时间每小时的第 10 分钟运行。部署后以 `systemctl list-timers binance-leaderboard-hourly.timer` 查看下次执行时间，以 `journalctl -u binance-leaderboard-hourly.service` 查看执行状态。该任务复用 `/etc/binance-leaderboard/telegram.env` 中的机器人凭据，数据目录为 `/var/lib/binance-leaderboard-hourly`。
+
 服务只监听 `127.0.0.1`，并检查页面请求来源。Cookie、CSRF Token、UUID 不在页面输入或存储，仍由启动进程从环境变量读取。奖池和个人封顶默认留空，页面不会把示例的 40,000 USDC 或 30 USDC 当作真实活动规则。关闭运行程序的终端即可停止页面服务。
 
 ### 服务器子路径

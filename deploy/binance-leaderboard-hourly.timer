@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Binance two-campaign report at minute 10 every hour (Beijing time)
+
+[Timer]
+OnCalendar=*-*-* *:10:00 Asia/Shanghai
+AccuracySec=1s
+Persistent=false
+Unit=binance-leaderboard-hourly.service
+
+[Install]
+WantedBy=timers.target

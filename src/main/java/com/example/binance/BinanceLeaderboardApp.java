@@ -23,9 +23,11 @@ public class BinanceLeaderboardApp {
     static int run(String[] args) {
         if (args.length == 1 && args[0].equals("--help")) {
             System.out.println(Options.help() + "\n页面模式: java -jar target/binance-leaderboard-stat.jar --web [--webPort=8787] [--webOrigin=https://域名]"
-                    + "\n查询 Telegram Chat ID: java -jar target/binance-leaderboard-stat.jar --telegram-chat-id");
+                    + "\n查询 Telegram Chat ID: java -jar target/binance-leaderboard-stat.jar --telegram-chat-id"
+                    + "\n双活动定时报告: java -jar target/binance-leaderboard-stat.jar --scheduled-report");
             return 0;
         }
+        if (args.length == 1 && args[0].equals("--scheduled-report")) return ScheduledLeaderboardReport.run();
         if (args.length == 1 && args[0].equals("--telegram-chat-id")) {
             try {
                 var ids = TelegramNotifier.chatIdsFromEnvironment();
