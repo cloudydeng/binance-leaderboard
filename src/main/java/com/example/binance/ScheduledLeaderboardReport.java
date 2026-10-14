@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Clock;
 import java.time.Duration;
@@ -21,7 +22,11 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Properties;
 import java.util.stream.Collectors;
+import com.fasterxml.jackson.databind.JsonNode;
 
 /** One fresh, combined Telegram report for the two current main reward leaderboards. */
 final class ScheduledLeaderboardReport {
@@ -53,13 +58,13 @@ final class ScheduledLeaderboardReport {
                 System.err.println("定时报告未配置 Telegram Bot Token 和 Chat ID");
                 return 2;
             }
-            return run(new BinanceLeaderboardClient()::fetchPage, notifier,
-                    BinanceSquarePublisher.fromEnvironment(), Path.of("."), 450);
+            return runIfUpdated(new BinanceLeaderboardClient()::fetchPage, notifier,
+                    BinanceSquarePublisher.fromEnvironment(), Path.of("."), 450, Clock.systemUTC());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             System.err.println("定时报告被中断");
         } catch (IOException | IllegalArgumentException e) {
-            System.err.println("定时报告发送失败：请核对 Telegram 配置和网络");
+            System.err.println("定时报告检查或发送失败：" + e.getMessage());
         }
         return 2;
     }
@@ -78,14 +83,71 @@ final class ScheduledLeaderboardReport {
     static int run(LeaderboardStatisticsService.PageSource source, TelegramNotifier notifier,
                    BinanceSquarePublisher square, Path workDir, int delayMs, Clock clock)
             throws IOException, InterruptedException {
+        return run(source, notifier, square, workDir, delayMs, clock, Map.of());
+    }
+
+    /** Timer poll: one light first-page check per active campaign; a later timer tick retries unchanged data. */
+    static int runIfUpdated(LeaderboardStatisticsService.PageSource source, TelegramNotifier notifier,
+                            BinanceSquarePublisher square, Path workDir, int delayMs, Clock clock)
+            throws IOException, InterruptedException {
+        Instant now = clock.instant();
+        var cache = new LeaderboardSnapshotCache(workDir.resolve("cache"));
+        Properties reported = new Properties();
+        Path reportedFile = workDir.resolve("last-reported-updates.properties");
+        if (Files.exists(reportedFile)) {
+            try (var input = Files.newInputStream(reportedFile)) { reported.load(input); }
+        }
+        String reportHour = DateTimeFormatter.ofPattern("yyyyMMddHH")
+                .withZone(ZoneId.of("Asia/Shanghai")).format(now);
+        if (reportHour.equals(reported.getProperty("reportHour"))) {
+            System.out.println("本小时已发送榜单报告，等待下小时检查");
+            return 0;
+        }
+        Map<String, Instant> priorUpdates = new HashMap<>();
+        boolean hasActiveCampaign = false;
+        for (Campaign campaign : CAMPAIGNS) {
+            if (!now.isBefore(campaign.endsAt())) continue;
+            hasActiveCampaign = true;
+            String reportedTime = reported.getProperty(campaign.resourceId());
+            Instant previous = reportedTime == null
+                    ? cache.latest(campaign.resourceId()).map(LeaderboardStatistics::leaderboardUpdatedAt)
+                            .map(Instant::parse).orElse(Instant.EPOCH)
+                    : Instant.parse(reportedTime);
+            priorUpdates.put(campaign.resourceId(), previous);
+            JsonNode firstPage = source.fetch(campaign.resourceId(), 1, 10);
+            JsonNode updatedNode = firstPage.path("data").path("updatedTime");
+            Instant current;
+            try { current = Instant.ofEpochMilli(Long.parseLong(updatedNode.asText())); }
+            catch (RuntimeException e) {
+                System.out.println(campaign.name() + " 未提供有效榜单更新时间，等待下次检查");
+                return 0;
+            }
+            if (!current.isAfter(previous)) {
+                System.out.println(campaign.name() + " 榜单尚未更新（" + beijing(previous.toString()) + "），等待下次检查");
+                return 0;
+            }
+        }
+        if (!hasActiveCampaign) {
+            System.out.println("活动均已结束，不再发送定时报告");
+            return 0;
+        }
+        return run(source, notifier, square, workDir, delayMs, clock, priorUpdates);
+    }
+
+    private static int run(LeaderboardStatisticsService.PageSource source, TelegramNotifier notifier,
+                           BinanceSquarePublisher square, Path workDir, int delayMs, Clock clock,
+                           Map<String, Instant> priorUpdates)
+            throws IOException, InterruptedException {
         var sections = new ArrayList<Section>();
         var cache = new LeaderboardSnapshotCache(workDir.resolve("cache"));
+        Instant startedAt = clock.instant();
         boolean failed = false;
         for (Campaign campaign : CAMPAIGNS) {
             Options options = Options.parse(new String[]{
                     "--resourceId=" + campaign.resourceId(), "--startRank=1001", "--pageSize=100",
                     "--delayMs=" + delayMs, "--rewardPool=80", "--rewardUnit=BNB",
-                    "--maxReward=0.05", "--refresh=true", "--outputDir=" + workDir});
+                    "--maxReward=0.05", "--refresh=" + startedAt.isBefore(campaign.endsAt()),
+                    "--outputDir=" + workDir});
             try {
                 var outcome = new CachedLeaderboardService(source, cache, progress -> {})
                         .collect(options);
@@ -98,11 +160,27 @@ final class ScheduledLeaderboardReport {
             }
         }
         Instant checkedAt = clock.instant();
+        if (!priorUpdates.isEmpty() && failed) {
+            System.out.println("完整榜单抓取失败，等待下次检查");
+            return 2;
+        }
+        for (Section section : sections) {
+            Instant previous = priorUpdates.get(section.campaign().resourceId());
+            if (previous == null) continue;
+            LeaderboardStatistics result = section.result();
+            if (result == null || !"COMPLETE".equals(result.completeness()) ||
+                    result.leaderboardUpdatedAt() == null) return 2;
+            if (!Instant.parse(result.leaderboardUpdatedAt()).isAfter(previous)) {
+                System.out.println(section.campaign().name() + " 完整抓取期间榜单未更新，等待下次检查");
+                return 0;
+            }
+        }
         String report = format(checkedAt, sections);
         notifier.sendTextWithLinks(report, CAMPAIGNS.stream()
                 .flatMap(c -> c.pairs().stream())
                 .map(p -> new TelegramNotifier.TextLink(p.label(), p.url()))
                 .toList());
+        if (!priorUpdates.isEmpty()) saveReportedUpdates(workDir, sections, checkedAt);
         System.out.println("已发送两项活动的合并报告；完整性：" + (failed ? "部分失败" : "完整"));
         if (square != null && !failed && CAMPAIGNS.stream().anyMatch(c -> checkedAt.isBefore(c.endsAt()))) {
             Path marker = workDir.resolve("square-posts")
@@ -125,6 +203,22 @@ final class ScheduledLeaderboardReport {
             }
         }
         return failed ? 2 : 0;
+    }
+
+    private static void saveReportedUpdates(Path workDir, List<Section> sections, Instant reportedAt) throws IOException {
+        Properties reported = new Properties();
+        reported.setProperty("reportHour", DateTimeFormatter.ofPattern("yyyyMMddHH")
+                .withZone(ZoneId.of("Asia/Shanghai")).format(reportedAt));
+        for (Section section : sections) {
+            if (section.result() != null && section.result().leaderboardUpdatedAt() != null)
+                reported.setProperty(section.campaign().resourceId(), section.result().leaderboardUpdatedAt());
+        }
+        Path destination = workDir.resolve("last-reported-updates.properties");
+        Path temporary = Files.createTempFile(workDir, ".last-reported-", ".tmp");
+        try {
+            try (var output = Files.newOutputStream(temporary)) { reported.store(output, "Last Telegram report by resource ID"); }
+            Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING);
+        } finally { Files.deleteIfExists(temporary); }
     }
 
     static String format(Instant checkedAt, List<Section> sections) {

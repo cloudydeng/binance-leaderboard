@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.Test;
@@ -26,12 +27,14 @@ class ScheduledLeaderboardReportTest {
     @Test void refreshesBothLeaderboardsAndSendsOneCombinedMessage() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         AtomicInteger calls = new AtomicInteger();
+        AtomicLong zecUpdated = new AtomicLong(1791853199000L);
+        AtomicLong metUpdated = new AtomicLong(1791853199000L);
         LeaderboardStatisticsService.PageSource source = (id, page, size) -> {
             assertTrue(id.equals("100030536") || id.equals("100030286"));
             calls.incrementAndGet();
             ObjectNode root = mapper.createObjectNode();
             ObjectNode data = root.putObject("data");
-            data.put("updatedTime", 1791853199000L);
+            data.put("updatedTime", id.equals("100030536") ? zecUpdated.get() : metUpdated.get());
             ObjectNode list = data.putObject("resourceSummaryList");
             list.put("total", 1001);
             list.put("hasMore", page < 11);
@@ -42,6 +45,7 @@ class ScheduledLeaderboardReportTest {
             return root;
         };
         try (MockWebServer telegram = new MockWebServer(); MockWebServer square = new MockWebServer()) {
+            telegram.enqueue(new MockResponse().setBody("{\"ok\":true,\"result\":{}}"));
             telegram.enqueue(new MockResponse().setBody("{\"ok\":true,\"result\":{}}"));
             telegram.enqueue(new MockResponse().setBody("{\"ok\":true,\"result\":{}}"));
             square.enqueue(new MockResponse().setBody(
@@ -90,10 +94,29 @@ class ScheduledLeaderboardReportTest {
                     "MET/USDC https://www.binance.com/zh-CN/trade/MET_USDC"));
             assertFalse(body.toString().contains("test-posting-key"));
 
-            assertEquals(0, ScheduledLeaderboardReport.run(source, notifier, publisher, temp, 0, clock));
-            assertEquals(44, calls.get()); // each scheduled run checks Binance again
+            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, publisher, temp, 0, clock));
+            assertEquals(23, calls.get()); // unchanged first page; no full fetch or duplicate post
+            assertEquals(1, telegram.getRequestCount());
+            zecUpdated.incrementAndGet();
+            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, publisher, temp, 0, clock));
+            assertEquals(25, calls.get()); // wait for the other active campaign too
+            assertEquals(1, telegram.getRequestCount());
+            metUpdated.incrementAndGet();
+            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, publisher, temp, 0, clock));
+            assertEquals(49, calls.get()); // two freshness probes plus both complete leaderboards
             assertNotNull(telegram.takeRequest());
+            assertEquals(2, telegram.getRequestCount());
             assertEquals(1, square.getRequestCount()); // one public post per hour
+            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, publisher, temp, 0, clock));
+            assertEquals(49, calls.get()); // no more than one new report in the same Beijing hour
+            zecUpdated.incrementAndGet();
+            Clock afterMetEnds = Clock.fixed(Instant.parse("2026-10-15T10:05:00Z"), ZoneOffset.UTC);
+            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, afterMetEnds));
+            assertEquals(61, calls.get()); // ended MET reuses its complete cache
+            assertEquals(3, telegram.getRequestCount());
+            Clock afterBothEnd = Clock.fixed(Instant.parse("2026-10-16T10:00:00Z"), ZoneOffset.UTC);
+            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, afterBothEnd));
+            assertEquals(61, calls.get());
         }
     }
 

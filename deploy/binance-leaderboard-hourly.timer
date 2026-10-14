@@ -1,8 +1,8 @@
 [Unit]
-Description=Run Binance two-campaign report at minute 10 every hour (Beijing time)
+Description=Check Binance leaderboards from minute 10 every five minutes (Beijing time)
 
 [Timer]
-OnCalendar=*-*-* *:10:00 Asia/Shanghai
+OnCalendar=*-*-* *:10,15,20,25,30,35,40,45,50,55:00 Asia/Shanghai
 AccuracySec=1s
 Persistent=false
 Unit=binance-leaderboard-hourly.service
