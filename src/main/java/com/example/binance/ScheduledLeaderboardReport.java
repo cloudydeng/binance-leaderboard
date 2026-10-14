@@ -152,6 +152,11 @@ final class ScheduledLeaderboardReport {
                 out.append("\n");
                 continue;
             }
+            out.append("第 1000 名交易量：")
+                    .append(result.rank1000Volume() == null
+                            ? "榜单未列出该名次"
+                            : decimal(result.rank1000Volume()) + " USD")
+                    .append("\n");
             out.append("交易量合计：").append(decimal(result.totalVolume())).append(" USD\n");
             var reward = result.rewardEstimate();
             if (reward == null) {

@@ -60,6 +60,7 @@ class ScheduledLeaderboardReportTest {
             assertTrue(first.contains("100030286"));
             assertTrue(first.contains("交易量合计：999 USD"));
             assertTrue(first.contains("第 1001–1001 名：1 人"));
+            assertEquals(2, first.split("第 1000 名交易量：1,000 USD", -1).length - 1);
             assertTrue(first.contains("80 BNB"));
             assertTrue(first.contains("0.05 BNB"));
             assertTrue(first.contains("交易对：ZEC/USDC、USUAL/USDT"));
