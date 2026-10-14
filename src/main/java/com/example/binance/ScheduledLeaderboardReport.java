@@ -41,6 +41,8 @@ final class ScheduledLeaderboardReport {
                     Instant.parse("2026-10-15T10:00:00Z")));
     private static final DateTimeFormatter BEIJING = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.of("Asia/Shanghai"));
+    // Regular-user spot fee (0.10%) after the 25% discount for paying with BNB.
+    private static final BigDecimal BNB_SPOT_FEE_RATE = new BigDecimal("0.00075");
 
     private ScheduledLeaderboardReport() {}
 
@@ -157,6 +159,11 @@ final class ScheduledLeaderboardReport {
                             ? "榜单未列出该名次"
                             : decimal(result.rank1000Volume()) + " USD")
                     .append("\n");
+            if (result.rank1000Volume() != null) {
+                out.append("第 1000 名手续费估算（BNB 支付）：约 ")
+                        .append(rounded(result.rank1000Volume().multiply(BNB_SPOT_FEE_RATE), 2))
+                        .append(" USDT\n");
+            }
             out.append("交易量合计：").append(decimal(result.totalVolume())).append(" USD\n");
             var reward = result.rewardEstimate();
             if (reward == null) {
@@ -168,7 +175,7 @@ final class ScheduledLeaderboardReport {
                     .append("达到 0.05 BNB 约需：")
                     .append(rounded(reward.capVolume(), 2)).append(" USD 交易量\n");
         }
-        out.append("\n仅按榜单交易量估算；实际资格与奖励以币安结算为准。");
+        out.append("\n手续费按普通用户现货标准费率 0.10%、BNB 抵扣 25%（即交易量 × 0.075%）估算，USD 近似按 USDT 计；USDC 吃单优惠、VIP 费率等可能使实际扣费不同。奖励与资格以币安结算为准。");
         return out.toString();
     }
 
