@@ -69,6 +69,7 @@ class ScheduledLeaderboardReportTest {
             assertFalse(first.contains("TestToken"));
             JsonNode entities = telegramBody.path("entities");
             assertEquals(3, entities.size());
+            assertTrue(telegramBody.path("link_preview_options").path("is_disabled").asBoolean());
             assertEquals("https://www.binance.com/zh-CN/trade/ZEC_USDC", entities.get(0).path("url").asText());
             assertEquals(first.indexOf("ZEC/USDC"), entities.get(0).path("offset").asInt());
             assertEquals("https://www.binance.com/zh-CN/trade/USUAL_USDT", entities.get(1).path("url").asText());

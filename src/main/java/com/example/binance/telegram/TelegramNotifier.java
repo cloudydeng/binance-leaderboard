@@ -88,7 +88,8 @@ public class TelegramNotifier {
                     "length", link.label().length(), "url", link.url()));
         }
         entities.sort(Comparator.comparingInt(entity -> (int) entity.get("offset")));
-        request("sendMessage", Map.of("chat_id", chatId, "text", text, "entities", entities));
+        request("sendMessage", Map.of("chat_id", chatId, "text", text, "entities", entities,
+                "link_preview_options", Map.of("is_disabled", true)));
     }
 
     private void validateText(String text) {
