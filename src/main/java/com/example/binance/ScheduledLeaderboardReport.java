@@ -34,9 +34,6 @@ final class ScheduledLeaderboardReport {
         String url() { return "https://www.binance.com/zh-CN/trade/" + symbol; }
         String squareTag() { return "$" + label; }
     }
-    private static boolean showTelegramPair(TradingPair pair) {
-        return !"MET/USDC".equals(pair.label());
-    }
     record Campaign(String name, String resourceId, List<TradingPair> pairs, Instant endsAt) {}
     record Section(Campaign campaign, LeaderboardStatistics result, String error) {}
 
@@ -148,10 +145,9 @@ final class ScheduledLeaderboardReport {
         var cache = new LeaderboardSnapshotCache(workDir.resolve("cache"));
         Map<String, LeaderboardStatistics> previousReports = loadPreviousReports(workDir, cache);
         Instant startedAt = clock.instant();
-        boolean failed = false;
         for (Campaign campaign : CAMPAIGNS) {
-            Options options = campaignOptions(campaign, workDir, delayMs,
-                    startedAt.isBefore(campaign.endsAt()));
+            if (!startedAt.isBefore(campaign.endsAt())) continue;
+            Options options = campaignOptions(campaign, workDir, delayMs, true);
             try {
                 var outcome = new CachedLeaderboardService(source, cache, progress -> {})
                         .collect(options);
@@ -159,16 +155,21 @@ final class ScheduledLeaderboardReport {
                 sections.add(new Section(campaign, result, null));
                 if (!"COMPLETE".equals(result.completeness())) {
                     System.err.println(campaign.name() + " 完整榜单不完整：" + String.join("；", result.issues()));
-                    failed = true;
                 }
             } catch (RuntimeException e) {
                 System.err.println(campaign.name() + " 计算异常：" + e.getClass().getSimpleName()
                         + (e.getMessage() == null ? "" : "：" + e.getMessage()));
                 sections.add(new Section(campaign, null, "计算异常：" + e.getClass().getSimpleName()));
-                failed = true;
             }
         }
         Instant checkedAt = clock.instant();
+        sections.removeIf(section -> !checkedAt.isBefore(section.campaign().endsAt()));
+        if (sections.isEmpty()) {
+            System.out.println("活动均已结束，不再发送定时报告");
+            return 0;
+        }
+        boolean failed = sections.stream().anyMatch(section -> section.result() == null ||
+                !"COMPLETE".equals(section.result().completeness()));
         if (!priorUpdates.isEmpty() && failed) {
             System.out.println("完整榜单抓取失败，等待下次检查");
             return 2;
@@ -185,13 +186,12 @@ final class ScheduledLeaderboardReport {
             }
         }
         String report = format(checkedAt, sections, previousReports);
-        notifier.sendTextWithLinks(report, CAMPAIGNS.stream()
-                .flatMap(c -> c.pairs().stream())
-                .filter(ScheduledLeaderboardReport::showTelegramPair)
+        notifier.sendTextWithLinks(report, sections.stream()
+                .flatMap(section -> section.campaign().pairs().stream())
                 .map(p -> new TelegramNotifier.TextLink(p.label(), p.url()))
                 .toList());
         if (!failed) saveReportedUpdates(workDir, sections, checkedAt);
-        System.out.println("已发送两项活动的合并报告；完整性：" + (failed ? "部分失败" : "完整"));
+        System.out.println("已发送 " + sections.size() + " 项活动报告；完整性：" + (failed ? "部分失败" : "完整"));
         if (square != null && !failed) {
             for (Section section : sections) {
                 if (!checkedAt.isBefore(section.campaign().endsAt())) continue;
@@ -271,14 +271,13 @@ final class ScheduledLeaderboardReport {
 
     static String format(Instant checkedAt, List<Section> sections,
                          Map<String, LeaderboardStatistics> previousReports) {
-        StringBuilder out = new StringBuilder("Binance 双活动榜单报告\n")
+        StringBuilder out = new StringBuilder("Binance 活动榜单报告\n")
                 .append("计算时间：").append(BEIJING.format(checkedAt)).append("（北京时间）\n")
                 .append("规则：第 1001 名及以后瓜分 80 BNB；单人封顶 0.05 BNB\n");
         for (Section section : sections) {
             out.append("\n").append(section.campaign().name()).append(" · ")
                     .append(section.campaign().resourceId()).append("\n");
             String telegramPairs = section.campaign().pairs().stream()
-                    .filter(ScheduledLeaderboardReport::showTelegramPair)
                     .map(TradingPair::label).collect(Collectors.joining("、"));
             if (!telegramPairs.isEmpty()) out.append("交易对：").append(telegramPairs).append("\n");
             out.append("活动结束：").append(BEIJING.format(section.campaign().endsAt()))

@@ -78,18 +78,18 @@ class ScheduledLeaderboardReportTest {
             assertTrue(first.contains("80 BNB"));
             assertTrue(first.contains("0.05 BNB"));
             assertTrue(first.contains("交易对：ZEC/USDC、USUAL/USDT"));
-            assertFalse(first.contains("MET/USDC"));
+            assertTrue(first.contains("交易对：MET/USDC"));
             assertTrue(first.contains("活动结束：2026-10-15 18:00:00（北京时间）"));
             assertTrue(first.contains("距离结束："));
             assertFalse(first.contains("较上次"));
             assertFalse(first.contains("TestToken"));
             JsonNode entities = telegramBody.path("entities");
-            assertEquals(2, entities.size());
+            assertEquals(3, entities.size());
             assertTrue(telegramBody.path("link_preview_options").path("is_disabled").asBoolean());
             assertEquals("https://www.binance.com/zh-CN/trade/ZEC_USDC", entities.get(0).path("url").asText());
             assertEquals(first.indexOf("ZEC/USDC"), entities.get(0).path("offset").asInt());
             assertEquals("https://www.binance.com/zh-CN/trade/USUAL_USDT", entities.get(1).path("url").asText());
-            assertFalse(telegramBody.toString().contains("https://www.binance.com/zh-CN/trade/MET_USDC"));
+            assertEquals("https://www.binance.com/zh-CN/trade/MET_USDC", entities.get(2).path("url").asText());
             var squareRequest = square.takeRequest();
             assertEquals("test-posting-key", squareRequest.getHeader("X-Square-OpenAPI-Key"));
             JsonNode body = mapper.readTree(squareRequest.getBody().readUtf8());
@@ -155,11 +155,14 @@ class ScheduledLeaderboardReportTest {
             zecVolumeBump.set(5);
             Clock afterMetEnds = Clock.fixed(Instant.parse("2026-10-15T10:05:00Z"), ZoneOffset.UTC);
             assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, afterMetEnds));
-            assertEquals(61, calls.get()); // ended MET reuses its complete cache
+            assertEquals(61, calls.get()); // ended MET is not fetched or included
             assertEquals(3, telegram.getRequestCount());
-            String third = mapper.readTree(telegram.takeRequest().getBody().readUtf8()).path("text").asText();
+            JsonNode thirdBody = mapper.readTree(telegram.takeRequest().getBody().readUtf8());
+            String third = thirdBody.path("text").asText();
             assertTrue(third.contains("第 1000 名交易量：1,005 USD（较上次 -5 USD）"));
-            assertTrue(third.contains("第 1000 名交易量：1,020 USD（较上次 0 USD）"));
+            assertFalse(third.contains("100030286"));
+            assertFalse(third.contains("MET/USDC"));
+            assertEquals(2, thirdBody.path("entities").size());
             Clock afterBothEnd = Clock.fixed(Instant.parse("2026-10-16T10:00:00Z"), ZoneOffset.UTC);
             assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, afterBothEnd));
             assertEquals(61, calls.get());
