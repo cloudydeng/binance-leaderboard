@@ -31,9 +31,19 @@ public class LeaderboardSnapshotCache {
                     .orElse(null);
         }
         if (newest == null) return Optional.empty();
+        return read(newest, resourceId);
+    }
+
+    /** Read the exact leaderboard version used by a previously sent report. */
+    public Optional<LeaderboardStatistics> at(String resourceId, Instant updatedAt) throws IOException {
+        Path snapshot = directory(resourceId).resolve(updatedAt.toEpochMilli() + ".json");
+        return Files.isRegularFile(snapshot) ? read(snapshot, resourceId) : Optional.empty();
+    }
+
+    private Optional<LeaderboardStatistics> read(Path file, String resourceId) throws IOException {
         try {
-            LeaderboardStatistics full = mapper.readValue(newest.toFile(), LeaderboardStatistics.class);
-            long filenameTime = Long.parseLong(newest.getFileName().toString().replace(".json", ""));
+            LeaderboardStatistics full = mapper.readValue(file.toFile(), LeaderboardStatistics.class);
+            long filenameTime = Long.parseLong(file.getFileName().toString().replace(".json", ""));
             if (!valid(full, resourceId, filenameTime)) throw new IOException("缓存校验失败");
             return Optional.of(full);
         } catch (RuntimeException | com.fasterxml.jackson.core.JsonProcessingException e) {

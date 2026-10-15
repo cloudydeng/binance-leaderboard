@@ -29,6 +29,8 @@ class ScheduledLeaderboardReportTest {
         AtomicInteger calls = new AtomicInteger();
         AtomicLong zecUpdated = new AtomicLong(1791853199000L);
         AtomicLong metUpdated = new AtomicLong(1791853199000L);
+        AtomicInteger zecVolumeBump = new AtomicInteger();
+        AtomicInteger metVolumeBump = new AtomicInteger();
         LeaderboardStatisticsService.PageSource source = (id, page, size) -> {
             assertTrue(id.equals("100030536") || id.equals("100030286"));
             calls.incrementAndGet();
@@ -40,7 +42,8 @@ class ScheduledLeaderboardReportTest {
             list.put("hasMore", page < 11);
             ArrayNode entries = list.putArray("data");
             for (int rank = (page - 1) * size + 1; rank <= Math.min(page * size, 1001); rank++) {
-                entries.addObject().put("sequence", rank).put("tradingVolume", 2000 - rank);
+                entries.addObject().put("sequence", rank).put("tradingVolume", 2000 - rank +
+                        (id.equals("100030536") ? zecVolumeBump.get() : metVolumeBump.get()));
             }
             return root;
         };
@@ -55,8 +58,9 @@ class ScheduledLeaderboardReportTest {
             BinanceSquarePublisher publisher = new BinanceSquarePublisher(square.url("/content/add").uri(),
                     "test-posting-key", HttpClient.newHttpClient());
             Clock clock = Clock.fixed(Instant.parse("2026-10-14T04:00:00Z"), ZoneOffset.UTC);
+            Clock previousHour = Clock.fixed(Instant.parse("2026-10-14T03:00:00Z"), ZoneOffset.UTC);
 
-            assertEquals(0, ScheduledLeaderboardReport.run(source, notifier, publisher, temp, 0, clock));
+            assertEquals(0, ScheduledLeaderboardReport.run(source, notifier, publisher, temp, 0, previousHour));
             assertEquals(22, calls.get());
             JsonNode telegramBody = mapper.readTree(telegram.takeRequest().getBody().readUtf8());
             String first = telegramBody.path("text").asText();
@@ -73,6 +77,7 @@ class ScheduledLeaderboardReportTest {
             assertTrue(first.contains("交易对：MET/USDC"));
             assertTrue(first.contains("活动结束：2026-10-15 18:00:00（北京时间）"));
             assertTrue(first.contains("距离结束："));
+            assertFalse(first.contains("较上次"));
             assertFalse(first.contains("TestToken"));
             JsonNode entities = telegramBody.path("entities");
             assertEquals(3, entities.size());
@@ -94,26 +99,38 @@ class ScheduledLeaderboardReportTest {
                     "MET/USDC https://www.binance.com/zh-CN/trade/MET_USDC"));
             assertFalse(body.toString().contains("test-posting-key"));
 
-            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, publisher, temp, 0, clock));
+            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, clock));
             assertEquals(23, calls.get()); // unchanged first page; no full fetch or duplicate post
             assertEquals(1, telegram.getRequestCount());
             zecUpdated.incrementAndGet();
-            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, publisher, temp, 0, clock));
+            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, clock));
             assertEquals(25, calls.get()); // wait for the other active campaign too
             assertEquals(1, telegram.getRequestCount());
             metUpdated.incrementAndGet();
-            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, publisher, temp, 0, clock));
+            zecVolumeBump.set(10);
+            metVolumeBump.set(20);
+            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, clock));
             assertEquals(49, calls.get()); // two freshness probes plus both complete leaderboards
-            assertNotNull(telegram.takeRequest());
+            String second = mapper.readTree(telegram.takeRequest().getBody().readUtf8()).path("text").asText();
+            assertTrue(second.contains("对比上次推送榜单："));
+            assertTrue(second.contains("第 1000 名交易量：1,010 USD（较上次 +10 USD）"));
+            assertTrue(second.contains("第 1000 名交易量：1,020 USD（较上次 +20 USD）"));
+            assertTrue(second.contains("交易量合计：1,009 USD（较上次 +10 USD）"));
+            assertTrue(second.contains("交易量合计：1,019 USD（较上次 +20 USD）"));
+            assertTrue(second.contains("第 1000 名手续费估算（BNB 支付）：约 0.76 USDT（较上次 +0.01 USDT）"));
             assertEquals(2, telegram.getRequestCount());
             assertEquals(1, square.getRequestCount()); // one public post per hour
-            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, publisher, temp, 0, clock));
+            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, clock));
             assertEquals(49, calls.get()); // no more than one new report in the same Beijing hour
             zecUpdated.incrementAndGet();
+            zecVolumeBump.set(5);
             Clock afterMetEnds = Clock.fixed(Instant.parse("2026-10-15T10:05:00Z"), ZoneOffset.UTC);
             assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, afterMetEnds));
             assertEquals(61, calls.get()); // ended MET reuses its complete cache
             assertEquals(3, telegram.getRequestCount());
+            String third = mapper.readTree(telegram.takeRequest().getBody().readUtf8()).path("text").asText();
+            assertTrue(third.contains("第 1000 名交易量：1,005 USD（较上次 -5 USD）"));
+            assertTrue(third.contains("第 1000 名交易量：1,020 USD（较上次 0 USD）"));
             Clock afterBothEnd = Clock.fixed(Instant.parse("2026-10-16T10:00:00Z"), ZoneOffset.UTC);
             assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, afterBothEnd));
             assertEquals(61, calls.get());
