@@ -154,8 +154,13 @@ final class ScheduledLeaderboardReport {
                         .collect(options);
                 var result = outcome.result();
                 sections.add(new Section(campaign, result, null));
-                if (!"COMPLETE".equals(result.completeness())) failed = true;
+                if (!"COMPLETE".equals(result.completeness())) {
+                    System.err.println(campaign.name() + " 完整榜单不完整：" + String.join("；", result.issues()));
+                    failed = true;
+                }
             } catch (RuntimeException e) {
+                System.err.println(campaign.name() + " 计算异常：" + e.getClass().getSimpleName()
+                        + (e.getMessage() == null ? "" : "：" + e.getMessage()));
                 sections.add(new Section(campaign, null, "计算异常：" + e.getClass().getSimpleName()));
                 failed = true;
             }
