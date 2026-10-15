@@ -34,6 +34,9 @@ final class ScheduledLeaderboardReport {
         String url() { return "https://www.binance.com/zh-CN/trade/" + symbol; }
         String squareTag() { return "$" + label; }
     }
+    private static boolean showTelegramPair(TradingPair pair) {
+        return !"MET/USDC".equals(pair.label());
+    }
     record Campaign(String name, String resourceId, List<TradingPair> pairs, Instant endsAt) {}
     record Section(Campaign campaign, LeaderboardStatistics result, String error) {}
 
@@ -184,6 +187,7 @@ final class ScheduledLeaderboardReport {
         String report = format(checkedAt, sections, previousReports);
         notifier.sendTextWithLinks(report, CAMPAIGNS.stream()
                 .flatMap(c -> c.pairs().stream())
+                .filter(ScheduledLeaderboardReport::showTelegramPair)
                 .map(p -> new TelegramNotifier.TextLink(p.label(), p.url()))
                 .toList());
         if (!failed) saveReportedUpdates(workDir, sections, checkedAt);
@@ -272,10 +276,12 @@ final class ScheduledLeaderboardReport {
                 .append("规则：第 1001 名及以后瓜分 80 BNB；单人封顶 0.05 BNB\n");
         for (Section section : sections) {
             out.append("\n").append(section.campaign().name()).append(" · ")
-                    .append(section.campaign().resourceId()).append("\n")
-                    .append("交易对：").append(section.campaign().pairs().stream()
-                            .map(TradingPair::label).collect(Collectors.joining("、"))).append("\n")
-                    .append("活动结束：").append(BEIJING.format(section.campaign().endsAt()))
+                    .append(section.campaign().resourceId()).append("\n");
+            String telegramPairs = section.campaign().pairs().stream()
+                    .filter(ScheduledLeaderboardReport::showTelegramPair)
+                    .map(TradingPair::label).collect(Collectors.joining("、"));
+            if (!telegramPairs.isEmpty()) out.append("交易对：").append(telegramPairs).append("\n");
+            out.append("活动结束：").append(BEIJING.format(section.campaign().endsAt()))
                     .append("（北京时间）\n")
                     .append("距离结束：").append(remaining(checkedAt, section.campaign().endsAt()))
                     .append("\n");
