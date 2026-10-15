@@ -32,6 +32,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 final class ScheduledLeaderboardReport {
     record TradingPair(String label, String symbol) {
         String url() { return "https://www.binance.com/zh-CN/trade/" + symbol; }
+        String squareTag() { return "$" + label; }
     }
     record Campaign(String name, String resourceId, List<TradingPair> pairs, Instant endsAt) {}
     record Section(Campaign campaign, LeaderboardStatistics result, String error) {}
@@ -336,7 +337,7 @@ final class ScheduledLeaderboardReport {
             throw new IllegalArgumentException("币安广场只发布完整的活动榜单");
         StringBuilder out = new StringBuilder("币安现货榜单｜")
                 .append(section.campaign().pairs().stream()
-                        .map(TradingPair::label).collect(Collectors.joining("、")))
+                        .map(TradingPair::squareTag).collect(Collectors.joining("、")))
                 .append("\n")
                 .append("活动 ").append(section.campaign().resourceId()).append("｜")
                 .append(SHORT_BEIJING.format(checkedAt)).append(" 北京时间\n")
@@ -356,10 +357,7 @@ final class ScheduledLeaderboardReport {
         out.append("榜单更新 ").append(shortBeijing(result.leaderboardUpdatedAt()))
                 .append("｜剩余 ").append(remaining(checkedAt, section.campaign().endsAt()))
                 .append("\n");
-        out.append("\n现货交易：\n");
-        for (TradingPair pair : section.campaign().pairs())
-            out.append(pair.label()).append(" ").append(pair.url()).append("\n");
-        return out.append("理论奖励仅供参考，以币安结算为准。").toString();
+        return out.append("\n理论奖励仅供参考，以币安结算为准。").toString();
     }
 
     private static String beijing(String iso) {

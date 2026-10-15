@@ -93,22 +93,19 @@ class ScheduledLeaderboardReportTest {
             JsonNode body = mapper.readTree(squareRequest.getBody().readUtf8());
             assertEquals(1, body.path("contentType").asInt());
             String squareText = body.path("bodyTextOnly").asText();
-            assertTrue(squareText.startsWith("币安现货榜单｜ZEC/USDC、USUAL/USDT"));
+            assertTrue(squareText.startsWith("币安现货榜单｜$ZEC/USDC、$USUAL/USDT"));
             assertTrue(squareText.contains("第1000名：1,000 USD"));
             assertTrue(squareText.contains("1001名后：1人｜交易量 999 USD"));
             assertTrue(squareText.contains("榜单更新 "));
             assertFalse(squareText.contains("手续费按普通用户"));
             assertTrue(squareText.length() < first.length());
-            assertTrue(squareText.contains(
-                    "ZEC/USDC https://www.binance.com/zh-CN/trade/ZEC_USDC"));
-            assertTrue(squareText.contains(
-                    "USUAL/USDT https://www.binance.com/zh-CN/trade/USUAL_USDT"));
+            assertFalse(squareText.contains("https://"));
             assertFalse(squareText.contains("MET/USDC"));
             assertFalse(body.toString().contains("test-posting-key"));
             String metSquareText = mapper.readTree(square.takeRequest().getBody().readUtf8())
                     .path("bodyTextOnly").asText();
-            assertTrue(metSquareText.startsWith("币安现货榜单｜MET/USDC"));
-            assertTrue(metSquareText.contains("MET/USDC https://www.binance.com/zh-CN/trade/MET_USDC"));
+            assertTrue(metSquareText.startsWith("币安现货榜单｜$MET/USDC"));
+            assertFalse(metSquareText.contains("https://"));
             assertFalse(metSquareText.contains("ZEC/USDC"));
 
             assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, clock));
