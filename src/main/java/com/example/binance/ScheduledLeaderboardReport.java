@@ -335,29 +335,39 @@ final class ScheduledLeaderboardReport {
         LeaderboardStatistics result = section.result();
         if (result == null || !"COMPLETE".equals(result.completeness()))
             throw new IllegalArgumentException("币安广场只发布完整的活动榜单");
-        StringBuilder out = new StringBuilder("币安现货榜单｜")
+        StringBuilder out = new StringBuilder("币安现货榜单\n")
                 .append(section.campaign().pairs().stream()
-                        .map(TradingPair::squareTag).collect(Collectors.joining("、")))
-                .append("\n")
-                .append("活动 ").append(section.campaign().resourceId()).append("｜")
-                .append(SHORT_BEIJING.format(checkedAt)).append(" 北京时间\n")
-                    .append("第1000名：").append(decimal(result.rank1000Volume())).append(" USD")
-                    .append(change(result.rank1000Volume(), previous == null ? null : previous.rank1000Volume(), " USD"))
-                    .append("\n")
-                    .append("1001名后：").append(result.rankFilteredCount()).append("人")
-                    .append(countChange(result.rankFilteredCount(), previous))
-                    .append("｜交易量 ").append(rounded(result.totalVolume(), 2)).append(" USD")
-                    .append(changeRounded(result.totalVolume(), previous == null ? null : previous.totalVolume(), 2, " USD"))
-                    .append("\n");
+                        .map(TradingPair::squareTag).collect(Collectors.joining(" · ")))
+                .append("\n\n")
+                .append("【第 1000 名交易量】\n")
+                .append(decimal(result.rank1000Volume())).append(" USD\n");
+        if (previous != null && result.rank1000Volume() != null && previous.rank1000Volume() != null)
+            out.append("较上次 ").append(signed(result.rank1000Volume().subtract(previous.rank1000Volume())))
+                    .append(" USD\n");
+        if (result.rank1000Volume() != null)
+            out.append("BNB 抵扣手续费约 ")
+                    .append(rounded(result.rank1000Volume().multiply(BNB_SPOT_FEE_RATE), 2))
+                    .append(" USDT\n");
+        out.append("\n1001 名后：").append(decimal(BigDecimal.valueOf(result.rankFilteredCount())))
+                .append(" 人");
+        if (previous != null)
+            out.append("（").append(signed(BigDecimal.valueOf(
+                    result.rankFilteredCount() - previous.rankFilteredCount()))).append("）");
+        out.append("\n交易量合计：").append(rounded(result.totalVolume(), 2)).append(" USD\n");
+        if (previous != null && result.totalVolume() != null && previous.totalVolume() != null)
+            out.append("较上次 ").append(signed(result.totalVolume().setScale(2, RoundingMode.HALF_UP)
+                    .subtract(previous.totalVolume().setScale(2, RoundingMode.HALF_UP))))
+                    .append(" USD\n");
         if (result.rewardEstimate() != null) {
-            out.append("每1000 USD约 ").append(rounded(result.rewardEstimate().rewardPer1000(), 8))
-                    .append(" BNB｜封顶约需 ").append(rounded(result.rewardEstimate().capVolume(), 2))
+            out.append("\n每 1,000 USD 约 ").append(rounded(result.rewardEstimate().rewardPer1000(), 8))
+                    .append(" BNB\n封顶约需 ").append(rounded(result.rewardEstimate().capVolume(), 2))
                     .append(" USD\n");
         }
-        out.append("榜单更新 ").append(shortBeijing(result.leaderboardUpdatedAt()))
-                .append("｜剩余 ").append(remaining(checkedAt, section.campaign().endsAt()))
-                .append("\n");
-        return out.append("\n理论奖励仅供参考，以币安结算为准。").toString();
+        out.append("\n主榜 ").append(section.campaign().resourceId())
+                .append("\n榜单更新：").append(shortBeijing(result.leaderboardUpdatedAt()))
+                .append("\n距离结束：").append(remaining(checkedAt, section.campaign().endsAt()))
+                .append("\n以币安结算为准。");
+        return out.toString();
     }
 
     private static String beijing(String iso) {

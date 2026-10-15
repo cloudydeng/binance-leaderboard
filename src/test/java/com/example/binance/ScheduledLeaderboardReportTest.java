@@ -1,5 +1,7 @@
 package com.example.binance;
 
+import com.example.binance.config.Options;
+import com.example.binance.service.LeaderboardSnapshotCache;
 import com.example.binance.service.LeaderboardStatisticsService;
 import com.example.binance.square.BinanceSquarePublisher;
 import com.example.binance.telegram.TelegramNotifier;
@@ -93,10 +95,12 @@ class ScheduledLeaderboardReportTest {
             JsonNode body = mapper.readTree(squareRequest.getBody().readUtf8());
             assertEquals(1, body.path("contentType").asInt());
             String squareText = body.path("bodyTextOnly").asText();
-            assertTrue(squareText.startsWith("币安现货榜单｜$ZEC/USDC、$USUAL/USDT"));
-            assertTrue(squareText.contains("第1000名：1,000 USD"));
-            assertTrue(squareText.contains("1001名后：1人｜交易量 999 USD"));
-            assertTrue(squareText.contains("榜单更新 "));
+            assertTrue(squareText.startsWith("币安现货榜单\n$ZEC/USDC · $USUAL/USDT\n\n【第 1000 名交易量】"));
+            assertTrue(squareText.contains("\n主榜 100030536\n榜单更新："));
+            assertTrue(squareText.contains("【第 1000 名交易量】\n1,000 USD"));
+            assertTrue(squareText.contains("BNB 抵扣手续费约 0.75 USDT"));
+            assertTrue(squareText.contains("\n1001 名后：1 人\n交易量合计：999 USD"));
+            assertTrue(squareText.contains("\n榜单更新："));
             assertFalse(squareText.contains("手续费按普通用户"));
             assertTrue(squareText.length() < first.length());
             assertFalse(squareText.contains("https://"));
@@ -104,7 +108,8 @@ class ScheduledLeaderboardReportTest {
             assertFalse(body.toString().contains("test-posting-key"));
             String metSquareText = mapper.readTree(square.takeRequest().getBody().readUtf8())
                     .path("bodyTextOnly").asText();
-            assertTrue(metSquareText.startsWith("币安现货榜单｜$MET/USDC"));
+            assertTrue(metSquareText.startsWith("币安现货榜单\n$MET/USDC\n\n【第 1000 名交易量】"));
+            assertTrue(metSquareText.contains("\n主榜 100030286\n榜单更新："));
             assertFalse(metSquareText.contains("https://"));
             assertFalse(metSquareText.contains("ZEC/USDC"));
 
@@ -127,6 +132,21 @@ class ScheduledLeaderboardReportTest {
             assertTrue(second.contains("交易量合计：1,009 USD（较上次 +10 USD）"));
             assertTrue(second.contains("交易量合计：1,019 USD（较上次 +20 USD）"));
             assertTrue(second.contains("第 1000 名手续费估算（BNB 支付）：约 0.76 USDT（较上次 +0.01 USDT）"));
+            var cache = new LeaderboardSnapshotCache(temp.resolve("cache"));
+            var options = Options.parse(new String[]{"--resourceId=100030536", "--startRank=1001",
+                    "--rewardPool=80", "--rewardUnit=BNB", "--maxReward=0.05"});
+            var priorZec = LeaderboardStatisticsService.recalculate(options,
+                    cache.at("100030536", Instant.ofEpochMilli(1791853199000L)).orElseThrow(), true);
+            var currentZec = LeaderboardStatisticsService.recalculate(options,
+                    cache.at("100030536", Instant.ofEpochMilli(zecUpdated.get())).orElseThrow(), true);
+            var zecCampaign = new ScheduledLeaderboardReport.Campaign("ZEC", "100030536",
+                    List.of(new ScheduledLeaderboardReport.TradingPair("ZEC/USDC", "ZEC_USDC")),
+                    Instant.parse("2026-10-16T10:00:00Z"));
+            String squarePreview = ScheduledLeaderboardReport.formatSquare(clock.instant(),
+                    new ScheduledLeaderboardReport.Section(zecCampaign, currentZec, null), priorZec);
+            assertTrue(squarePreview.contains("【第 1000 名交易量】\n1,010 USD\n较上次 +10 USD\n"));
+            assertTrue(squarePreview.contains("交易量合计：1,009 USD\n较上次 +10 USD\n"));
+            assertFalse(squarePreview.contains("https://"));
             assertEquals(2, telegram.getRequestCount());
             assertEquals(2, square.getRequestCount()); // one post per active campaign
             assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, clock));
