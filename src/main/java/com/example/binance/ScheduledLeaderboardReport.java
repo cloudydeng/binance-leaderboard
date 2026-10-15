@@ -28,13 +28,18 @@ import java.util.Properties;
 import java.util.stream.Collectors;
 import com.fasterxml.jackson.databind.JsonNode;
 
-/** One fresh, combined Telegram report for the two current main reward leaderboards. */
+/** One fresh Telegram report for all active main reward leaderboards. */
 final class ScheduledLeaderboardReport {
     record TradingPair(String label, String symbol) {
         String url() { return "https://www.binance.com/zh-CN/trade/" + symbol; }
         String squareTag() { return "$" + label; }
     }
-    record Campaign(String name, String resourceId, List<TradingPair> pairs, Instant endsAt) {}
+    record Campaign(String name, String resourceId, List<TradingPair> pairs, Instant startsAt, Instant endsAt) {
+        Campaign(String name, String resourceId, List<TradingPair> pairs, Instant endsAt) {
+            this(name, resourceId, pairs, Instant.EPOCH, endsAt);
+        }
+        boolean activeAt(Instant time) { return !time.isBefore(startsAt) && time.isBefore(endsAt); }
+    }
     record Section(Campaign campaign, LeaderboardStatistics result, String error) {}
 
     private static final List<Campaign> CAMPAIGNS = List.of(
@@ -44,7 +49,11 @@ final class ScheduledLeaderboardReport {
                     Instant.parse("2026-10-16T10:00:00Z")),
             new Campaign("MET 交易锦标赛", "100030286",
                     List.of(new TradingPair("MET/USDC", "MET_USDC")),
-                    Instant.parse("2026-10-15T10:00:00Z")));
+                    Instant.parse("2026-10-15T10:00:00Z")),
+            new Campaign("现货交易量锦标赛第五期", "100031374",
+                    List.of(new TradingPair("NEAR/USDC", "NEAR_USDC"),
+                            new TradingPair("OPEN/USDT", "OPEN_USDT")),
+                    Instant.parse("2026-10-14T10:00:00Z"), Instant.parse("2026-10-21T10:00:00Z")));
     private static final DateTimeFormatter BEIJING = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.of("Asia/Shanghai"));
     private static final DateTimeFormatter SHORT_BEIJING = DateTimeFormatter.ofPattern("MM-dd HH:mm")
@@ -109,7 +118,7 @@ final class ScheduledLeaderboardReport {
         Map<String, Instant> priorUpdates = new HashMap<>();
         boolean hasActiveCampaign = false;
         for (Campaign campaign : CAMPAIGNS) {
-            if (!now.isBefore(campaign.endsAt())) continue;
+            if (!campaign.activeAt(now)) continue;
             hasActiveCampaign = true;
             String reportedTime = reported.getProperty(campaign.resourceId());
             Instant previous = reportedTime == null
@@ -146,7 +155,7 @@ final class ScheduledLeaderboardReport {
         Map<String, LeaderboardStatistics> previousReports = loadPreviousReports(workDir, cache);
         Instant startedAt = clock.instant();
         for (Campaign campaign : CAMPAIGNS) {
-            if (!startedAt.isBefore(campaign.endsAt())) continue;
+            if (!campaign.activeAt(startedAt)) continue;
             Options options = campaignOptions(campaign, workDir, delayMs, true);
             try {
                 var outcome = new CachedLeaderboardService(source, cache, progress -> {})
@@ -163,7 +172,7 @@ final class ScheduledLeaderboardReport {
             }
         }
         Instant checkedAt = clock.instant();
-        sections.removeIf(section -> !checkedAt.isBefore(section.campaign().endsAt()));
+        sections.removeIf(section -> !section.campaign().activeAt(checkedAt));
         if (sections.isEmpty()) {
             System.out.println("活动均已结束，不再发送定时报告");
             return 0;
@@ -194,7 +203,7 @@ final class ScheduledLeaderboardReport {
         System.out.println("已发送 " + sections.size() + " 项活动报告；完整性：" + (failed ? "部分失败" : "完整"));
         if (square != null && !failed) {
             for (Section section : sections) {
-                if (!checkedAt.isBefore(section.campaign().endsAt())) continue;
+                if (!section.campaign().activeAt(checkedAt)) continue;
                 Path marker = workDir.resolve("square-posts")
                         .resolve(DateTimeFormatter.ofPattern("yyyyMMddHH").withZone(ZoneId.of("Asia/Shanghai"))
                                 .format(checkedAt) + "-" + section.campaign().resourceId() + ".txt");

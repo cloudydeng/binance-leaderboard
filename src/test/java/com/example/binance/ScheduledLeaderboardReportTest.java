@@ -31,21 +31,31 @@ class ScheduledLeaderboardReportTest {
         AtomicInteger calls = new AtomicInteger();
         AtomicLong zecUpdated = new AtomicLong(1791853199000L);
         AtomicLong metUpdated = new AtomicLong(1791853199000L);
+        AtomicLong season5Updated = new AtomicLong(1791853199000L);
         AtomicInteger zecVolumeBump = new AtomicInteger();
         AtomicInteger metVolumeBump = new AtomicInteger();
+        AtomicInteger season5VolumeBump = new AtomicInteger();
         LeaderboardStatisticsService.PageSource source = (id, page, size) -> {
-            assertTrue(id.equals("100030536") || id.equals("100030286"));
+            assertTrue(id.equals("100030536") || id.equals("100030286") || id.equals("100031374"));
             calls.incrementAndGet();
             ObjectNode root = mapper.createObjectNode();
             ObjectNode data = root.putObject("data");
-            data.put("updatedTime", id.equals("100030536") ? zecUpdated.get() : metUpdated.get());
+            data.put("updatedTime", switch (id) {
+                case "100030536" -> zecUpdated.get();
+                case "100030286" -> metUpdated.get();
+                default -> season5Updated.get();
+            });
             ObjectNode list = data.putObject("resourceSummaryList");
             list.put("total", 1001);
             list.put("hasMore", page < 11);
             ArrayNode entries = list.putArray("data");
             for (int rank = (page - 1) * size + 1; rank <= Math.min(page * size, 1001); rank++) {
-                entries.addObject().put("sequence", rank).put("tradingVolume", 2000 - rank +
-                        (id.equals("100030536") ? zecVolumeBump.get() : metVolumeBump.get()));
+                int bump = switch (id) {
+                    case "100030536" -> zecVolumeBump.get();
+                    case "100030286" -> metVolumeBump.get();
+                    default -> season5VolumeBump.get();
+                };
+                entries.addObject().put("sequence", rank).put("tradingVolume", 2000 - rank + bump);
             }
             return root;
         };
@@ -155,17 +165,19 @@ class ScheduledLeaderboardReportTest {
             zecVolumeBump.set(5);
             Clock afterMetEnds = Clock.fixed(Instant.parse("2026-10-15T10:05:00Z"), ZoneOffset.UTC);
             assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, afterMetEnds));
-            assertEquals(61, calls.get()); // ended MET is not fetched or included
+            assertEquals(73, calls.get()); // ZEC and Season 5, with ended MET omitted
             assertEquals(3, telegram.getRequestCount());
             JsonNode thirdBody = mapper.readTree(telegram.takeRequest().getBody().readUtf8());
             String third = thirdBody.path("text").asText();
             assertTrue(third.contains("第 1000 名交易量：1,005 USD（较上次 -5 USD）"));
             assertFalse(third.contains("100030286"));
             assertFalse(third.contains("MET/USDC"));
-            assertEquals(2, thirdBody.path("entities").size());
-            Clock afterBothEnd = Clock.fixed(Instant.parse("2026-10-16T10:00:00Z"), ZoneOffset.UTC);
-            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, afterBothEnd));
-            assertEquals(61, calls.get());
+            assertTrue(third.contains("100031374"));
+            assertTrue(third.contains("交易对：NEAR/USDC、OPEN/USDT"));
+            assertEquals(4, thirdBody.path("entities").size());
+            Clock afterAllEnd = Clock.fixed(Instant.parse("2026-10-21T10:00:00Z"), ZoneOffset.UTC);
+            assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, afterAllEnd));
+            assertEquals(73, calls.get());
         }
     }
 

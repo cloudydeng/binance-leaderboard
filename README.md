@@ -38,21 +38,21 @@ java -jar target/binance-leaderboard-stat.jar --web
 
 请勿把 Token 发到聊天、命令参数或 Git；如果泄露，通过 @BotFather 重新生成。
 
-### 每小时双活动报告
+### 每小时活动报告
 
-`java -jar target/binance-leaderboard-stat.jar --scheduled-report` 会检查主榜 `100030536`（现货交易量锦标赛第四期，指定交易对 ZEC/USDC、USUAL/USDT；北京时间 2026-10-16 18:00 结束）和 `100030286`（MET/USDC；北京时间 2026-10-15 18:00 结束）。从每小时第 10 分钟起每 5 分钟检查一次榜单的 `updatedTime`；仍在进行的活动都比上次报告更新后，才完整抓取并合并发送一条 Telegram 消息，完整抓取期间更新时间没有前进也不发送。Telegram 报告仅包含发送时仍在进行的活动，已结束活动不再展示。已结束的活动不再抓取或展示；两个活动都结束后停止发送。每个北京时间小时最多发送一次。上次报告的更新时间保存在独立状态目录，首次升级时以该目录现有完整快照为基线。定时模式不用页面缓存，完整快照另存于自己的 `cache/`。
+`java -jar target/binance-leaderboard-stat.jar --scheduled-report` 已配置主榜 `100030536`（第四期，ZEC/USDC、USUAL/USDT；北京时间 2026-10-16 18:00 结束）、`100030286`（MET/USDC；北京时间 2026-10-15 18:00 结束）和 `100031374`（第五期，NEAR/USDC、OPEN/USDT；北京时间 2026-10-21 18:00 结束）。仅检查已开始且尚未结束的活动；从每小时第 10 分钟起每 5 分钟检查一次榜单的 `updatedTime`，当前活动都比上次报告更新后，才完整抓取并合并发送一条 Telegram 消息。已结束活动不再抓取或展示；全部活动结束后停止发送。每个北京时间小时最多发送一次。上次报告的更新时间保存在独立状态目录，首次升级时以该目录现有完整快照为基线。定时模式不用页面缓存，完整快照另存于自己的 `cache/`。
 
-报告按第 1001 名及以后各自的完整交易量计算 **80 BNB** 比例奖池与 **0.05 BNB** 个人封顶。消息列出完整交易对、结束时间与动态倒计时、榜单更新时间、第 1000 名交易量及其 BNB 支付手续费的 USDT 等值估算、范围人数、交易量合计、每 1,000 USD 交易量对应的理论 BNB 与达到个人封顶所需交易量。每个数字还与该活动**上一条实际发送报告所用的榜单快照**比较，显示增减量；已结束活动若继续出现在合并报告中，未变化的数据显示 `0`。比较基准从 `last-reported-updates.properties` 指向的完整缓存读取，缺少有效上次快照时只显示当前值。手续费按普通用户现货标准费率 `0.10% × (1 - 25%) = 0.075%` 估算，榜单 USD 交易量近似按 USDT 计；USDC 吃单优惠、VIP 费率等会影响实际扣费。Telegram 中点击交易对文字可直接打开对应币安现货交易页。若某项抓取不完整，不发送新报告并在下一次检查时重试；也不读取页面中输入的个人交易量。
+报告按第 1001 名及以后各自的完整交易量计算 **80 BNB** 比例奖池与 **0.05 BNB** 个人封顶。消息列出完整交易对、结束时间与动态倒计时、榜单更新时间、第 1000 名交易量及其 BNB 支付手续费的 USDT 等值估算、范围人数、交易量合计、每 1,000 USD 交易量对应的理论 BNB 与达到个人封顶所需交易量。每个数字还与该活动**上一条实际发送报告所用的榜单快照**比较，显示增减量。比较基准从 `last-reported-updates.properties` 指向的完整缓存读取，缺少有效上次快照时只显示当前值。手续费按普通用户现货标准费率 `0.10% × (1 - 25%) = 0.075%` 估算，榜单 USD 交易量近似按 USDT 计；USDC 吃单优惠、VIP 费率等会影响实际扣费。Telegram 中点击交易对文字可直接打开对应币安现货交易页。若某项抓取不完整，不发送新报告并在下一次检查时重试；也不读取页面中输入的个人交易量。
 
-服务器使用 `deploy/binance-leaderboard-hourly.service` 和 `.timer`，按北京时间每小时的第 10 分钟运行。部署后以 `systemctl list-timers binance-leaderboard-hourly.timer` 查看下次执行时间，以 `journalctl -u binance-leaderboard-hourly.service` 查看执行状态。该任务复用 `/etc/binance-leaderboard/telegram.env` 中的机器人凭据，数据目录为 `/var/lib/binance-leaderboard-hourly`。
+服务器使用 `deploy/binance-leaderboard-hourly.service` 和 `.timer`，按北京时间每小时第 10 分钟起每 5 分钟检查。部署后以 `systemctl list-timers binance-leaderboard-hourly.timer` 查看下次执行时间，以 `journalctl -u binance-leaderboard-hourly.service` 查看执行状态。该任务复用 `/etc/binance-leaderboard/telegram.env` 中的机器人凭据，数据目录为 `/var/lib/binance-leaderboard-hourly`。
 
 ### 币安广场发帖
 
-配置广场专用的 **Posting API Key** 后，同一个定时任务会按活动分别发简短纯文本帖：当前两个活动各一帖。移动端排版先独立突出第 1000 名交易量、相对上次的变化及手续费估算，再分段列出第 1001 名后人数、交易量合计、奖励估算和榜单时间；每项短行显示，避免长行自动折断。帖中使用 `$ZEC/USDC`、`$USUAL/USDT`、`$MET/USDC` 形式的币安代币标签，不展示原始 URL。币安 Square OpenAPI 当前使用 `bodyTextOnly` 纯文本字段，不能像 Telegram `text_link` 一样给交易对文字绑定指定的现货交易页；代币标签的点击落点由币安决定。已结束活动不再发帖。它与现货交易 API Key 不同，仅用于发帖。服务器以 root 运行 `bash /opt/binance-leaderboard/deploy/setup-square.sh`，在无回显提示下输入密钥；脚本将其写入权限 `0600` 的 `/etc/binance-leaderboard/square.env`。密钥不进命令参数、Git、榜单缓存或 Telegram 文本。未配置时跳过广场，Telegram 照常发送。
+配置广场专用的 **Posting API Key** 后，同一个定时任务会按活动分别发简短纯文本帖：每个仍在进行的活动各一帖。移动端排版先独立突出第 1000 名交易量、相对上次的变化及手续费估算，再分段列出第 1001 名后人数、交易量合计、奖励估算和榜单时间；每项短行显示，避免长行自动折断。帖中使用 `$ZEC/USDC`、`$USUAL/USDT`、`$MET/USDC` 形式的币安代币标签，不展示原始 URL。币安 Square OpenAPI 当前使用 `bodyTextOnly` 纯文本字段，不能像 Telegram `text_link` 一样给交易对文字绑定指定的现货交易页；代币标签的点击落点由币安决定。已结束活动不再发帖。它与现货交易 API Key 不同，仅用于发帖。服务器以 root 运行 `bash /opt/binance-leaderboard/deploy/setup-square.sh`，在无回显提示下输入密钥；脚本将其写入权限 `0600` 的 `/etc/binance-leaderboard/square.env`。密钥不进命令参数、Git、榜单缓存或 Telegram 文本。未配置时跳过广场，Telegram 照常发送。
 
 广场发送由服务器 `/etc/binance-leaderboard/square.env` 控制；移走该文件即可暂停，Telegram 不受影响。
 
-每次完整抓取后每个仍在进行的活动至多发一帖；同一北京时间小时内手动重跑不会重复发同一活动的帖子。抓取不完整时只通知 Telegram。两个活动都结束后不再发广场帖。每个活动各自的发布记录和链接保存在独立状态目录 `/var/lib/binance-leaderboard-hourly/square-posts/`。广场接口返回错误时任务会在日志中记录错误码，下一小时仍会重试。创建密钥的入口：[币安广场创作者中心](https://www.binance.com/square/creator-center/home)。
+每次完整抓取后每个仍在进行的活动至多发一帖；同一北京时间小时内手动重跑不会重复发同一活动的帖子。抓取不完整时只通知 Telegram。全部活动结束后不再发广场帖。每个活动各自的发布记录和链接保存在独立状态目录 `/var/lib/binance-leaderboard-hourly/square-posts/`。广场接口返回错误时任务会在日志中记录错误码，下一小时仍会重试。创建密钥的入口：[币安广场创作者中心](https://www.binance.com/square/creator-center/home)。
 
 服务只监听 `127.0.0.1`，并检查页面请求来源。Cookie、CSRF Token、UUID 不在页面输入或存储，仍由启动进程从环境变量读取。奖池和个人封顶默认留空，页面不会把示例的 40,000 USDC 或 30 USDC 当作真实活动规则。关闭运行程序的终端即可停止页面服务。
 
