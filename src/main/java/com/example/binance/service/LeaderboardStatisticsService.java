@@ -40,6 +40,8 @@ public class LeaderboardStatisticsService {
         Long expectedTotal = null;
         Long eligibleUserCount = null;
         BigDecimal eligibleTradingVolume = null;
+        boolean eligibleUserCountUnstable = false;
+        boolean eligibleTradingVolumeUnstable = false;
         Long updatedTime = null;
         LeaderboardPage previousPage = null;
         for (int pageIndex = 1; pageIndex <= options.maxPages(); pageIndex++) {
@@ -71,15 +73,19 @@ public class LeaderboardStatisticsService {
                 if (expectedTotal != null && !expectedTotal.equals(page.total())) { issues.add("榜单总人数在抓取中变化"); break; }
                 expectedTotal = page.total();
             }
-            if (page.eligibleUserCount() != null) {
-                if (eligibleUserCount != null && !eligibleUserCount.equals(page.eligibleUserCount())) { issues.add("接口合格人数在抓取中变化"); break; }
-                eligibleUserCount = page.eligibleUserCount();
+            if (!eligibleUserCountUnstable && page.eligibleUserCount() != null) {
+                if (eligibleUserCount != null && !eligibleUserCount.equals(page.eligibleUserCount())) {
+                    LOG.warn("接口合格人数在抓取中变化，跳过该实时字段的校验，继续核对榜单快照");
+                    eligibleUserCount = null;
+                    eligibleUserCountUnstable = true;
+                } else eligibleUserCount = page.eligibleUserCount();
             }
-            if (page.eligibleTradingVolume() != null) {
+            if (!eligibleTradingVolumeUnstable && page.eligibleTradingVolume() != null) {
                 if (eligibleTradingVolume != null && eligibleTradingVolume.compareTo(page.eligibleTradingVolume()) != 0) {
-                    issues.add("接口合格交易量在抓取中变化"); break;
-                }
-                eligibleTradingVolume = page.eligibleTradingVolume();
+                    LOG.warn("接口合格交易量在抓取中变化，跳过该实时字段的校验，继续核对榜单快照");
+                    eligibleTradingVolume = null;
+                    eligibleTradingVolumeUnstable = true;
+                } else eligibleTradingVolume = page.eligibleTradingVolume();
             }
             if (page.updatedTime() != null) {
                 if (updatedTime != null && !updatedTime.equals(page.updatedTime())) {
@@ -105,6 +111,8 @@ public class LeaderboardStatisticsService {
                 expectedTotal = null;
                 eligibleUserCount = null;
                 eligibleTradingVolume = null;
+                eligibleUserCountUnstable = false;
+                eligibleTradingVolumeUnstable = false;
                 updatedTime = null;
                 volumeField = null;
                 entriesPath = null;

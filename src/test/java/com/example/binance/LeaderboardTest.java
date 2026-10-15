@@ -134,6 +134,25 @@ class LeaderboardTest {
         assertTrue(result.issues().get(0).contains("榜单更新时间"));
     }
 
+    @Test void changingLiveEligibilityMetadataDoesNotInvalidateStableRankedSnapshot() throws Exception {
+        JsonNode first = json("""
+                {"data":{"list":[{"rank":1,"tradeVolume":4},{"rank":2,"tradeVolume":3}],
+                "total":4,"hasMore":true,"updatedTime":1791853199000,
+                "eligibleUserCount":4,"eligibleTradingVolume":10}}
+                """);
+        JsonNode second = json("""
+                {"data":{"list":[{"rank":3,"tradeVolume":2},{"rank":4,"tradeVolume":1}],
+                "total":4,"hasMore":false,"updatedTime":1791853199000,
+                "eligibleUserCount":5,"eligibleTradingVolume":11}}
+                """);
+        var result = new LeaderboardStatisticsService((id, index, size) -> index == 1 ? first : second)
+                .collect(options("--startRank=1"));
+        assertEquals("COMPLETE", result.completeness());
+        assertEquals(new BigDecimal("10"), result.totalVolume());
+        assertNull(result.serverEligibleUserCount());
+        assertNull(result.serverEligibleTradingVolume());
+    }
+
     @Test void knownEmptyFirstPageReportsIncompleteInsteadOfParserFailureOrZeroResult() throws Exception {
         JsonNode empty = json("""
                 {"code":"000000","success":true,"data":{"resourceSummaryList":
