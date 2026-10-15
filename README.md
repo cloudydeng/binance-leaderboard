@@ -46,13 +46,13 @@ java -jar target/binance-leaderboard-stat.jar --web
 
 服务器使用 `deploy/binance-leaderboard-hourly.service` 和 `.timer`，按北京时间每小时的第 10 分钟运行。部署后以 `systemctl list-timers binance-leaderboard-hourly.timer` 查看下次执行时间，以 `journalctl -u binance-leaderboard-hourly.service` 查看执行状态。该任务复用 `/etc/binance-leaderboard/telegram.env` 中的机器人凭据，数据目录为 `/var/lib/binance-leaderboard-hourly`。
 
-### 币安广场发帖（线上已暂停）
+### 币安广场发帖
 
-配置广场专用的 **Posting API Key** 后，同一个定时任务会把完整的双活动报告作为纯文本帖发布到币安广场，并附上三个交易对各自的现货交易页直链。它与现货交易 API Key 不同，仅用于发帖。服务器以 root 运行 `bash /opt/binance-leaderboard/deploy/setup-square.sh`，在无回显提示下输入密钥；脚本将其写入权限 `0600` 的 `/etc/binance-leaderboard/square.env`。密钥不进命令参数、Git、榜单缓存或 Telegram 文本。未配置时跳过广场，Telegram 照常发送。
+配置广场专用的 **Posting API Key** 后，同一个定时任务会按活动分别发简短纯文本帖：当前两个活动各一帖，各帖只含该活动的榜单摘要、相对上次报告的主要变化和自己的现货交易页直链。已结束活动不再发帖。它与现货交易 API Key 不同，仅用于发帖。服务器以 root 运行 `bash /opt/binance-leaderboard/deploy/setup-square.sh`，在无回显提示下输入密钥；脚本将其写入权限 `0600` 的 `/etc/binance-leaderboard/square.env`。密钥不进命令参数、Git、榜单缓存或 Telegram 文本。未配置时跳过广场，Telegram 照常发送。
 
-当前线上按用户要求暂停广场发帖：`square.env` 已移至仅 root 可读的 `square.env.disabled`，定时任务只发送 Telegram。需要恢复广场发帖时，须明确重新启用对应环境文件。
+广场发送由服务器 `/etc/binance-leaderboard/square.env` 控制；移走该文件即可暂停，Telegram 不受影响。
 
-每次完整抓取后至多发一帖；同一北京时间小时内手动重跑不会重复发帖。抓取不完整时只通知 Telegram。两个活动都结束后不再发广场帖。发布记录和链接保存在独立状态目录 `/var/lib/binance-leaderboard-hourly/square-posts/`。广场接口返回错误时任务会在日志中记录错误码，下一小时仍会重试。创建密钥的入口：[币安广场创作者中心](https://www.binance.com/square/creator-center/home)。
+每次完整抓取后每个仍在进行的活动至多发一帖；同一北京时间小时内手动重跑不会重复发同一活动的帖子。抓取不完整时只通知 Telegram。两个活动都结束后不再发广场帖。每个活动各自的发布记录和链接保存在独立状态目录 `/var/lib/binance-leaderboard-hourly/square-posts/`。广场接口返回错误时任务会在日志中记录错误码，下一小时仍会重试。创建密钥的入口：[币安广场创作者中心](https://www.binance.com/square/creator-center/home)。
 
 服务只监听 `127.0.0.1`，并检查页面请求来源。Cookie、CSRF Token、UUID 不在页面输入或存储，仍由启动进程从环境变量读取。奖池和个人封顶默认留空，页面不会把示例的 40,000 USDC 或 30 USDC 当作真实活动规则。关闭运行程序的终端即可停止页面服务。
 

@@ -53,6 +53,8 @@ class ScheduledLeaderboardReportTest {
             telegram.enqueue(new MockResponse().setBody("{\"ok\":true,\"result\":{}}"));
             square.enqueue(new MockResponse().setBody(
                     "{\"code\":\"000000\",\"data\":{\"id\":\"42\",\"shareLink\":\"https://www.binance.com/en/square/post/42\"}}"));
+            square.enqueue(new MockResponse().setBody(
+                    "{\"code\":\"000000\",\"data\":{\"id\":\"43\",\"shareLink\":\"https://www.binance.com/en/square/post/43\"}}"));
             TelegramNotifier notifier = new TelegramNotifier(telegram.url("/").uri(),
                     "123:TestToken", "456", HttpClient.newHttpClient());
             BinanceSquarePublisher publisher = new BinanceSquarePublisher(square.url("/content/add").uri(),
@@ -90,14 +92,24 @@ class ScheduledLeaderboardReportTest {
             assertEquals("test-posting-key", squareRequest.getHeader("X-Square-OpenAPI-Key"));
             JsonNode body = mapper.readTree(squareRequest.getBody().readUtf8());
             assertEquals(1, body.path("contentType").asInt());
-            assertTrue(body.path("bodyTextOnly").asText().startsWith(first));
-            assertTrue(body.path("bodyTextOnly").asText().contains(
+            String squareText = body.path("bodyTextOnly").asText();
+            assertTrue(squareText.startsWith("币安现货榜单｜ZEC/USDC、USUAL/USDT"));
+            assertTrue(squareText.contains("第1000名：1,000 USD"));
+            assertTrue(squareText.contains("1001名后：1人｜交易量 999 USD"));
+            assertTrue(squareText.contains("榜单更新 "));
+            assertFalse(squareText.contains("手续费按普通用户"));
+            assertTrue(squareText.length() < first.length());
+            assertTrue(squareText.contains(
                     "ZEC/USDC https://www.binance.com/zh-CN/trade/ZEC_USDC"));
-            assertTrue(body.path("bodyTextOnly").asText().contains(
+            assertTrue(squareText.contains(
                     "USUAL/USDT https://www.binance.com/zh-CN/trade/USUAL_USDT"));
-            assertTrue(body.path("bodyTextOnly").asText().contains(
-                    "MET/USDC https://www.binance.com/zh-CN/trade/MET_USDC"));
+            assertFalse(squareText.contains("MET/USDC"));
             assertFalse(body.toString().contains("test-posting-key"));
+            String metSquareText = mapper.readTree(square.takeRequest().getBody().readUtf8())
+                    .path("bodyTextOnly").asText();
+            assertTrue(metSquareText.startsWith("币安现货榜单｜MET/USDC"));
+            assertTrue(metSquareText.contains("MET/USDC https://www.binance.com/zh-CN/trade/MET_USDC"));
+            assertFalse(metSquareText.contains("ZEC/USDC"));
 
             assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, clock));
             assertEquals(23, calls.get()); // unchanged first page; no full fetch or duplicate post
@@ -119,7 +131,7 @@ class ScheduledLeaderboardReportTest {
             assertTrue(second.contains("交易量合计：1,019 USD（较上次 +20 USD）"));
             assertTrue(second.contains("第 1000 名手续费估算（BNB 支付）：约 0.76 USDT（较上次 +0.01 USDT）"));
             assertEquals(2, telegram.getRequestCount());
-            assertEquals(1, square.getRequestCount()); // one public post per hour
+            assertEquals(2, square.getRequestCount()); // one post per active campaign
             assertEquals(0, ScheduledLeaderboardReport.runIfUpdated(source, notifier, null, temp, 0, clock));
             assertEquals(49, calls.get()); // no more than one new report in the same Beijing hour
             zecUpdated.incrementAndGet();

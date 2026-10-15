@@ -46,6 +46,8 @@ final class ScheduledLeaderboardReport {
                     Instant.parse("2026-10-15T10:00:00Z")));
     private static final DateTimeFormatter BEIJING = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.of("Asia/Shanghai"));
+    private static final DateTimeFormatter SHORT_BEIJING = DateTimeFormatter.ofPattern("MM-dd HH:mm")
+            .withZone(ZoneId.of("Asia/Shanghai"));
     // Regular-user spot fee (0.10%) after the 25% discount for paying with BNB.
     private static final BigDecimal BNB_SPOT_FEE_RATE = new BigDecimal("0.00075");
 
@@ -180,22 +182,26 @@ final class ScheduledLeaderboardReport {
                 .toList());
         if (!failed) saveReportedUpdates(workDir, sections, checkedAt);
         System.out.println("已发送两项活动的合并报告；完整性：" + (failed ? "部分失败" : "完整"));
-        if (square != null && !failed && CAMPAIGNS.stream().anyMatch(c -> checkedAt.isBefore(c.endsAt()))) {
-            Path marker = workDir.resolve("square-posts")
-                    .resolve(DateTimeFormatter.ofPattern("yyyyMMddHH").withZone(ZoneId.of("Asia/Shanghai"))
-                            .format(checkedAt) + ".txt");
-            if (Files.exists(marker)) {
-                System.out.println("本小时币安广场报告已发布，跳过重复发帖");
-            } else {
+        if (square != null && !failed) {
+            for (Section section : sections) {
+                if (!checkedAt.isBefore(section.campaign().endsAt())) continue;
+                Path marker = workDir.resolve("square-posts")
+                        .resolve(DateTimeFormatter.ofPattern("yyyyMMddHH").withZone(ZoneId.of("Asia/Shanghai"))
+                                .format(checkedAt) + "-" + section.campaign().resourceId() + ".txt");
+                if (Files.exists(marker)) {
+                    System.out.println(section.campaign().name() + " 本小时币安广场帖子已发布，跳过");
+                    continue;
+                }
                 try {
-                    var published = square.publish(formatSquare(report));
+                    var published = square.publish(formatSquare(checkedAt, section,
+                            previousReports.get(section.campaign().resourceId())));
                     Files.createDirectories(marker.getParent());
                     Files.writeString(marker, published.link() == null ? "已提交\n" : published.link() + "\n",
                             StandardOpenOption.CREATE_NEW);
-                    System.out.println("已发布币安广场报告：" +
+                    System.out.println("已发布 " + section.campaign().name() + " 币安广场帖子：" +
                             (published.link() == null ? "已提交，未返回链接" : published.link()));
                 } catch (IOException e) {
-                    System.err.println("币安广场发布失败：" + e.getMessage());
+                    System.err.println(section.campaign().name() + " 币安广场发布失败：" + e.getMessage());
                     return 2;
                 }
             }
@@ -324,20 +330,48 @@ final class ScheduledLeaderboardReport {
         return out.toString();
     }
 
-    static String formatSquare(String report) {
-        StringBuilder out = new StringBuilder(report).append("\n\n现货交易页面：\n");
-        for (Campaign campaign : CAMPAIGNS) {
-            for (TradingPair pair : campaign.pairs()) {
-                out.append(pair.label()).append(" ").append(pair.url()).append("\n");
-            }
+    static String formatSquare(Instant checkedAt, Section section, LeaderboardStatistics previous) {
+        LeaderboardStatistics result = section.result();
+        if (result == null || !"COMPLETE".equals(result.completeness()))
+            throw new IllegalArgumentException("币安广场只发布完整的活动榜单");
+        StringBuilder out = new StringBuilder("币安现货榜单｜")
+                .append(section.campaign().pairs().stream()
+                        .map(TradingPair::label).collect(Collectors.joining("、")))
+                .append("\n")
+                .append("活动 ").append(section.campaign().resourceId()).append("｜")
+                .append(SHORT_BEIJING.format(checkedAt)).append(" 北京时间\n")
+                    .append("第1000名：").append(decimal(result.rank1000Volume())).append(" USD")
+                    .append(change(result.rank1000Volume(), previous == null ? null : previous.rank1000Volume(), " USD"))
+                    .append("\n")
+                    .append("1001名后：").append(result.rankFilteredCount()).append("人")
+                    .append(countChange(result.rankFilteredCount(), previous))
+                    .append("｜交易量 ").append(rounded(result.totalVolume(), 2)).append(" USD")
+                    .append(changeRounded(result.totalVolume(), previous == null ? null : previous.totalVolume(), 2, " USD"))
+                    .append("\n");
+        if (result.rewardEstimate() != null) {
+            out.append("每1000 USD约 ").append(rounded(result.rewardEstimate().rewardPer1000(), 8))
+                    .append(" BNB｜封顶约需 ").append(rounded(result.rewardEstimate().capVolume(), 2))
+                    .append(" USD\n");
         }
-        return out.toString();
+        out.append("榜单更新 ").append(shortBeijing(result.leaderboardUpdatedAt()))
+                .append("｜剩余 ").append(remaining(checkedAt, section.campaign().endsAt()))
+                .append("\n");
+        out.append("\n现货交易：\n");
+        for (TradingPair pair : section.campaign().pairs())
+            out.append(pair.label()).append(" ").append(pair.url()).append("\n");
+        return out.append("理论奖励仅供参考，以币安结算为准。").toString();
     }
 
     private static String beijing(String iso) {
         if (iso == null) return "接口未提供";
         try { return BEIJING.format(Instant.parse(iso)) + "（北京时间）"; }
         catch (RuntimeException e) { return "时间格式无效"; }
+    }
+
+    private static String shortBeijing(String iso) {
+        if (iso == null) return "未知";
+        try { return SHORT_BEIJING.format(Instant.parse(iso)); }
+        catch (RuntimeException e) { return "未知"; }
     }
 
     private static String remaining(Instant now, Instant endsAt) {
